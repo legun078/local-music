@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="robots" content="noindex, nofollow" />
+  <meta name="theme-color" content="#12121a" />
+  <title>운영 대시보드</title>
+  <script>
+    window.SCHEDULE_BASE = (function () {
+      const p = location.pathname;
+      if (p.startsWith("/schedule/test")) return "/schedule/test";
+      if (p.startsWith("/test")) return "/test";
+      if (p.startsWith("/schedule")) return "/schedule";
+      return "";
+    })();
+    if (window.SCHEDULE_BASE) {
+      const baseEl = document.createElement("base");
+      baseEl.href = `${window.SCHEDULE_BASE}/`;
+      document.head.appendChild(baseEl);
+    }
+  </script>
+  <script src="js/schedule-base.js?v=1"></script>
+  <link rel="stylesheet" href="css/style.css?v=font-fix1" />
+  <link rel="stylesheet" href="css/analytics.css?v=32" />
+</head>
+<body class="analytics-page">
+  <div id="auth-gate" class="analytics-auth-gate">
+    <div class="analytics-auth-card panel">
+      <h1 class="analytics-title">운영 대시보드</h1>
+      <p id="auth-gate-desc" class="analytics-lead">개발자 권한이 필요합니다.</p>
+      <a id="google-login-link" class="btn btn-google btn-lg hidden" href="#">Google로 로그인</a>
+      <p id="auth-error" class="analytics-status analytics-status--gate"></p>
+      <a class="btn btn-ghost btn-sm" data-page-href="/home" href="/home">← 홈으로</a>
+    </div>
+  </div>
+
+  <div id="analytics-app" class="hidden">
+  <header class="analytics-header panel">
+    <div>
+      <h1 class="analytics-title">운영 대시보드</h1>
+      <p class="analytics-lead">개발자 전용 · Google Analytics 4 · <span id="analytics-live" class="analytics-live">실시간 갱신</span></p>
+    </div>
+    <div class="analytics-header-actions">
+      <button type="button" id="analytics-refresh" class="btn btn-ghost btn-sm">새로고침</button>
+      <button type="button" id="analytics-pause" class="btn btn-ghost btn-sm" aria-pressed="false">자동 갱신 끄기</button>
+      <a class="btn btn-ghost btn-sm" id="analytics-ga4-link" href="#" target="_blank" rel="noopener noreferrer">GA4 보고서</a>
+      <a class="btn btn-ghost btn-sm" href="home">← 사이트로</a>
+    </div>
+  </header>
+
+  <p id="analytics-status" class="analytics-status" aria-live="polite"></p>
+
+  <section class="panel analytics-server" id="analytics-server" hidden>
+    <div class="analytics-section-head">
+      <h2 class="analytics-section-title">서버 상태</h2>
+      <div class="analytics-server-controls">
+        <label class="analytics-range-label analytics-range-label--inline">
+          집계
+          <select id="server-window">
+            <option value="live" selected>실시간</option>
+            <option value="1h">최근 1시간</option>
+            <option value="6h">최근 6시간</option>
+            <option value="24h">최근 24시간</option>
+            <option value="7d">최근 7일</option>
+          </select>
+        </label>
+        <span id="server-status-badge" class="analytics-status-badge">—</span>
+      </div>
+    </div>
+    <div class="analytics-summary-grid analytics-summary-grid--server">
+      <div class="analytics-summary-card">
+        <span class="analytics-summary-label">가동 시간</span>
+        <strong id="server-uptime" class="analytics-summary-value analytics-summary-value--sm">—</strong>
+      </div>
+      <div class="analytics-summary-card">
+        <span id="server-cpu-label" class="analytics-summary-label">CPU</span>
+        <strong id="server-cpu" class="analytics-summary-value analytics-summary-value--sm">—</strong>
+      </div>
+      <div class="analytics-summary-card">
+        <span id="server-memory-label" class="analytics-summary-label">메모리</span>
+        <strong id="server-memory" class="analytics-summary-value analytics-summary-value--sm">—</strong>
+      </div>
+      <div class="analytics-summary-card">
+        <span id="server-temp-label" class="analytics-summary-label">온도</span>
+        <strong id="server-temp" class="analytics-summary-value analytics-summary-value--sm">—</strong>
+      </div>
+      <div class="analytics-summary-card">
+        <span id="server-disk-label" class="analytics-summary-label">디스크 사용</span>
+        <strong id="server-disk" class="analytics-summary-value analytics-summary-value--sm">—</strong>
+      </div>
+    </div>
+    <div class="analytics-table-scroll">
+      <table class="analytics-table analytics-table--compact">
+        <thead>
+          <tr>
+            <th scope="col">파일</th>
+            <th scope="col">크기</th>
+            <th scope="col">수정</th>
+          </tr>
+        </thead>
+        <tbody id="server-files-body"></tbody>
+      </table>
+    </div>
+    <p id="server-meta" class="analytics-note"></p>
+    <p id="server-status-error" class="analytics-note analytics-note--error" hidden></p>
+  </section>
+
+  <section class="panel analytics-ops" id="analytics-ops" hidden>
+    <div class="analytics-ops-head">
+      <div class="analytics-ops-head-row">
+        <h2 class="analytics-section-title analytics-ops-title">실시간 트래픽</h2>
+        <span id="ops-status-badge" class="analytics-status-badge">—</span>
+      </div>
+      <div class="analytics-ops-toolbar">
+        <div class="analytics-ops-view-toggle" role="group" aria-label="트래픽 범위">
+          <button type="button" id="ops-audience-user" class="analytics-ops-tab is-active" aria-pressed="true">방문자</button>
+          <button type="button" id="ops-audience-ops" class="analytics-ops-tab" aria-pressed="false">운영 도구</button>
+        </div>
+        <div class="analytics-ops-view-toggle" role="group" aria-label="트래픽 보기">
+          <button type="button" id="ops-view-page" class="analytics-ops-tab is-active" aria-pressed="true">페이지별</button>
+          <button type="button" id="ops-view-endpoint" class="analytics-ops-tab" aria-pressed="false">엔드포인트</button>
+        </div>
+        <div class="analytics-ops-filters">
+          <label class="analytics-ops-field">
+            <span class="analytics-ops-field-label">페이지</span>
+            <select id="ops-page" class="analytics-ops-select">
+              <option value="">전체</option>
+              <option value="home">홈</option>
+              <option value="calendar">방송 일정</option>
+              <option value="musicbook">노래책</option>
+              <option value="song-requests">노래책 신청</option>
+              <option value="auth">인증</option>
+              <option value="other">기타</option>
+            </select>
+          </label>
+          <label class="analytics-ops-field analytics-ops-filter analytics-ops-filter--endpoint" hidden>
+            <span class="analytics-ops-field-label">검색</span>
+            <input id="ops-filter" class="analytics-ops-input" type="search" placeholder="엔드포인트·페이지" autocomplete="off" />
+          </label>
+          <label class="analytics-ops-field">
+            <span class="analytics-ops-field-label">창</span>
+            <select id="ops-window" class="analytics-ops-select">
+              <option value="60">최근 1분</option>
+              <option value="180">최근 3분</option>
+              <option value="300" selected>최근 5분</option>
+              <option value="600">최근 10분</option>
+              <option value="1800">최근 30분</option>
+              <option value="3600">최근 1시간</option>
+              <option value="10800">최근 3시간</option>
+              <option value="21600">최근 6시간</option>
+              <option value="43200">최근 12시간</option>
+              <option value="86400">최근 24시간</option>
+            </select>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <div class="analytics-ops-metrics">
+      <div class="analytics-ops-live-panel">
+        <div class="analytics-ops-panel-label">
+          <span class="analytics-ops-pulse" aria-hidden="true"></span>
+          지금 · 최근 1분
+        </div>
+        <div class="analytics-ops-kpi-grid analytics-ops-kpi-grid--live">
+          <div class="analytics-ops-kpi">
+            <span class="analytics-ops-kpi-label">실시간 사용자</span>
+            <strong id="ops-live-users" class="analytics-ops-kpi-value">—</strong>
+          </div>
+          <div class="analytics-ops-kpi">
+            <span class="analytics-ops-kpi-label">요청 수</span>
+            <strong id="ops-live-total" class="analytics-ops-kpi-value">—</strong>
+          </div>
+          <div class="analytics-ops-kpi">
+            <span class="analytics-ops-kpi-label">p50</span>
+            <strong id="ops-live-p50" class="analytics-ops-kpi-value analytics-ops-kpi-value--sm">—</strong>
+          </div>
+          <div class="analytics-ops-kpi">
+            <span class="analytics-ops-kpi-label">p95</span>
+            <strong id="ops-live-p95" class="analytics-ops-kpi-value analytics-ops-kpi-value--sm">—</strong>
+          </div>
+        </div>
+        <p id="ops-live-users-note" class="analytics-ops-live-note"></p>
+        <p id="ops-audience-note" class="analytics-ops-live-note analytics-ops-audience-note" hidden></p>
+      </div>
+
+      <div class="analytics-ops-window-panel">
+        <div class="analytics-ops-panel-label analytics-ops-panel-label--muted">
+          선택 창 · <span id="ops-window-label">최근 5분</span>
+        </div>
+        <div class="analytics-ops-kpi-grid analytics-ops-kpi-grid--window">
+          <div class="analytics-ops-kpi analytics-ops-kpi--compact">
+            <span class="analytics-ops-kpi-label">요청</span>
+            <strong id="ops-total" class="analytics-ops-kpi-value analytics-ops-kpi-value--compact">—</strong>
+          </div>
+          <div class="analytics-ops-kpi analytics-ops-kpi--compact">
+            <span class="analytics-ops-kpi-label">활성</span>
+            <strong id="ops-users" class="analytics-ops-kpi-value analytics-ops-kpi-value--compact">—</strong>
+          </div>
+          <div class="analytics-ops-kpi analytics-ops-kpi--compact">
+            <span class="analytics-ops-kpi-label">p50</span>
+            <strong id="ops-p50" class="analytics-ops-kpi-value analytics-ops-kpi-value--compact">—</strong>
+          </div>
+          <div class="analytics-ops-kpi analytics-ops-kpi--compact">
+            <span class="analytics-ops-kpi-label">p95</span>
+            <strong id="ops-p95" class="analytics-ops-kpi-value analytics-ops-kpi-value--compact">—</strong>
+          </div>
+          <div class="analytics-ops-kpi analytics-ops-kpi--compact" id="ops-errors-wrap">
+            <span class="analytics-ops-kpi-label">5xx</span>
+            <strong id="ops-errors" class="analytics-ops-kpi-value analytics-ops-kpi-value--compact">—</strong>
+          </div>
+          <div class="analytics-ops-kpi analytics-ops-kpi--compact">
+            <span class="analytics-ops-kpi-label">진행 중</span>
+            <strong id="ops-inflight" class="analytics-ops-kpi-value analytics-ops-kpi-value--compact">—</strong>
+          </div>
+          <div class="analytics-ops-kpi analytics-ops-kpi--compact">
+            <span class="analytics-ops-kpi-label">req/s</span>
+            <strong id="ops-rps" class="analytics-ops-kpi-value analytics-ops-kpi-value--compact">—</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="analytics-ops-chart">
+      <div class="analytics-ops-chart-head">
+        <div class="analytics-ops-chart-title-row">
+          <strong class="analytics-ops-chart-title">요청량</strong>
+          <span id="ops-spark-bucket" class="analytics-ops-bucket-badge" hidden></span>
+        </div>
+        <span id="ops-spark-meta" class="analytics-ops-chart-meta"></span>
+      </div>
+      <div class="analytics-ops-chart-body">
+        <div class="analytics-ops-y-axis" aria-hidden="true">
+          <span id="ops-spark-y-max" class="analytics-ops-y-label">—</span>
+          <span id="ops-spark-y-mid" class="analytics-ops-y-label">—</span>
+          <span id="ops-spark-y-min" class="analytics-ops-y-label">0</span>
+        </div>
+        <div class="analytics-ops-plot">
+          <div id="ops-spark" class="analytics-ops-spark" role="img" aria-label="요청량 막대 그래프"></div>
+          <div class="analytics-ops-axis" aria-hidden="true">
+            <span id="ops-spark-start" class="analytics-ops-axis-label">—</span>
+            <span id="ops-spark-mid" class="analytics-ops-axis-label">—</span>
+            <span id="ops-spark-end" class="analytics-ops-axis-label">—</span>
+          </div>
+        </div>
+      </div>
+      <div id="ops-spark-tooltip" class="analytics-ops-tooltip" role="tooltip" hidden></div>
+    </div>
+
+    <div class="analytics-ops-table-panel">
+      <div class="analytics-ops-table-head">
+        <strong id="ops-table-title" class="analytics-ops-table-title">페이지별 요청</strong>
+      </div>
+      <div class="analytics-table-scroll">
+        <table class="analytics-table analytics-table--ops">
+          <thead>
+            <tr id="ops-table-head">
+              <th scope="col">페이지</th>
+              <th scope="col">요청</th>
+              <th scope="col">5xx</th>
+              <th scope="col">p95</th>
+            </tr>
+          </thead>
+          <tbody id="ops-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="analytics-ops-log-panel">
+      <div class="analytics-ops-table-head">
+        <strong class="analytics-ops-table-title">요청 로그</strong>
+        <span id="ops-log-meta" class="analytics-ops-chart-meta">최근 50건</span>
+      </div>
+      <pre id="ops-recent-log" class="analytics-ops-log" aria-live="polite">—</pre>
+    </div>
+    <p id="ops-error" class="analytics-note analytics-note--error" hidden></p>
+  </section>
+
+  <section class="panel analytics-audit" id="analytics-audit" hidden>
+    <div class="analytics-section-head">
+      <h2 class="analytics-section-title">수정 로그</h2>
+      <div class="analytics-server-controls">
+        <label class="analytics-range-label analytics-range-label--inline">
+          대상
+          <select id="audit-resource">
+            <option value="">전체</option>
+            <option value="schedule">스케줄</option>
+            <option value="musicbook">노래책</option>
+            <option value="songRequests">노래책 신청</option>
+            <option value="auth">인증</option>
+          </select>
+        </label>
+        <label class="analytics-range-label analytics-range-label--inline">
+          사용자
+          <select id="audit-actor">
+            <option value="">전체</option>
+          </select>
+        </label>
+        <label class="analytics-range-label analytics-range-label--inline">
+          검색
+          <input id="audit-q" class="analytics-input" type="search" placeholder="예) post / approve / 반려" autocomplete="off" />
+        </label>
+        <button type="button" id="audit-refresh" class="btn btn-ghost btn-sm">로그 새로고침</button>
+      </div>
+    </div>
+
+    <div class="analytics-audit-scroll">
+      <table class="analytics-table analytics-table--compact">
+        <thead>
+          <tr>
+            <th scope="col">시간</th>
+            <th scope="col">대상</th>
+            <th scope="col">행동</th>
+            <th scope="col">사용자</th>
+            <th scope="col">요약</th>
+          </tr>
+        </thead>
+        <tbody id="audit-body"></tbody>
+      </table>
+    </div>
+    <div class="analytics-audit-pager" id="audit-pager" hidden>
+      <button type="button" class="btn btn-ghost btn-sm" id="audit-prev" aria-label="이전 페이지">이전</button>
+      <span class="analytics-audit-pager-info" id="audit-page-info">1 / 1</span>
+      <button type="button" class="btn btn-ghost btn-sm" id="audit-next" aria-label="다음 페이지">다음</button>
+    </div>
+    <p id="audit-error" class="analytics-note analytics-note--error" hidden></p>
+  </section>
+
+  <section class="panel analytics-ga4" id="analytics-ga4" hidden>
+    <div class="analytics-section-head">
+      <h2 class="analytics-section-title">조회 · 방문</h2>
+      <div class="analytics-server-controls">
+        <label class="analytics-range-label analytics-range-label--inline">
+          기간
+          <select id="analytics-range">
+            <option value="7">최근 7일</option>
+            <option value="30" selected>최근 30일</option>
+            <option value="90">최근 90일</option>
+          </select>
+        </label>
+      </div>
+    </div>
+
+    <div class="analytics-summary-grid" id="analytics-summary">
+      <div class="analytics-summary-card">
+        <span id="analytics-today-label" class="analytics-summary-label">오늘 조회수</span>
+        <strong id="analytics-today-views" class="analytics-summary-value">0</strong>
+      </div>
+      <div class="analytics-summary-card">
+        <span id="analytics-total-label" class="analytics-summary-label">기간 조회수</span>
+        <strong id="analytics-total-views" class="analytics-summary-value">0</strong>
+      </div>
+    </div>
+    <p id="analytics-range-dates" class="analytics-note analytics-note--range">—</p>
+    <p id="analytics-note" class="analytics-note"></p>
+
+    <div class="analytics-ga4-table" id="analytics-table-wrap">
+      <div class="analytics-section-head analytics-section-head--sub">
+        <h3 class="analytics-section-subtitle">방문 통계</h3>
+        <div class="analytics-metric-toggle" role="group" aria-label="통계 지표">
+          <button type="button" class="analytics-metric-btn is-active" data-metric="views" aria-pressed="true">조회수</button>
+          <button type="button" class="analytics-metric-btn" data-metric="visitors" aria-pressed="false">순방문자</button>
+        </div>
+      </div>
+      <div class="analytics-table-scroll">
+        <table class="analytics-table">
+          <thead>
+            <tr>
+              <th scope="col">페이지</th>
+              <th scope="col">경로</th>
+              <th scope="col" id="analytics-col-range">기간 조회</th>
+              <th scope="col" id="analytics-col-total">누적</th>
+            </tr>
+          </thead>
+          <tbody id="analytics-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  </div>
+
+  <script type="module" src="js/analytics.js?v=audit-detail2"></script>
+</body>
+</html>
