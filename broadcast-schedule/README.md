@@ -8,8 +8,16 @@
 |------|-----------|
 | `server.py` | `server.py` (재시작 필요) |
 | `analytics.html` | `analytics.html` |
+| `js/editor.js` | `js/editor.js` |
+| `js/slots.js` | `js/slots.js` |
 
-## 최근 변경: 운영 로그 확장
+## 최근 변경
+
+### 일정 시작 시간 선택 UI 수정
+- `editor.js`에서 `snapMinuteToStep` 미import로 클릭 시 UI가 갱신되지 않던 문제 수정
+- 시·분 선택 시 즉시 트리거 라벨·활성 상태 반영
+
+### 운영 로그 확장
 
 - **로그인** (`auth` / `login`): Google OAuth 콜백·부하 테스트 로그인
 - **로그아웃** (`auth` / `logout`): 세션 종료 전 기록
