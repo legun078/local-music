@@ -7,6 +7,7 @@ const NICK_KEY = "mg_nickname";
 export const NICKNAME_TAKEN_MESSAGE = "이미 사용 중인 닉네임입니다.";
 
 let accountLoggedIn = false;
+let accountSavedNickname = "";
 let nicknameCheckTimer = 0;
 let nicknameCheckSeq = 0;
 
@@ -22,6 +23,16 @@ const NICK_ANIMAL = [
 
 export function isAccountLoggedIn() {
   return accountLoggedIn;
+}
+
+export function getAccountSavedNickname() {
+  return accountSavedNickname;
+}
+
+export function isAccountNicknameSaved(value) {
+  const n = String(value || "").trim();
+  if (!accountLoggedIn || !accountSavedNickname) return !accountLoggedIn;
+  return n === accountSavedNickname;
 }
 
 export function defaultRoomLabel(nickname = "") {
@@ -143,33 +154,39 @@ export function setNickname(name) {
   return n;
 }
 
-let saveNickTimer = 0;
-
-async function saveAccountNicknameIfLoggedIn(name) {
-  if (!accountLoggedIn) return;
-  const check = validateNicknameInput(name);
-  if (!check.ok) return;
-  try {
-    await api("/api/player/nickname", { method: "PUT", body: { nickname: check.value } });
-  } catch (_) {
-    /* 방·랭킹 요청 시 서버가 다시 검증 */
-  }
-}
-
-/** 닉네임 입력란 — localStorage 저장 + (로그인 시) 서버 등록 */
+/** 닉네임 입력란 — localStorage 저장 (서버 등록은 저장 버튼) */
 export function bindNicknameField(input, { onChange, onStateChange } = {}) {
   if (!input) return;
   const save = () => {
     const n = setNickname(input.value);
     onChange?.(n);
-    clearTimeout(saveNickTimer);
-    saveNickTimer = window.setTimeout(() => {
-      void saveAccountNicknameIfLoggedIn(n);
-    }, 500);
   };
   input.addEventListener("input", save);
   input.addEventListener("change", save);
   bindNicknameValidation(input, { onChange: onStateChange });
+}
+
+/** 로그인 계정에 닉네임을 등록합니다. */
+export async function saveAccountNickname(name) {
+  if (!accountLoggedIn) {
+    throw new Error("로그인이 필요합니다.");
+  }
+  const check = validateNicknameInput(name);
+  if (!check.ok) {
+    const err = new Error(check.message);
+    err.code = "invalid";
+    throw err;
+  }
+  const avail = await checkNicknameAvailability(check.value);
+  if (!avail.available) {
+    const err = new Error(avail.message || NICKNAME_TAKEN_MESSAGE);
+    err.code = avail.reason || "nickname_taken";
+    throw err;
+  }
+  const data = await api("/api/player/nickname", { method: "PUT", body: { nickname: check.value } });
+  accountSavedNickname = data.nickname || check.value;
+  setNickname(accountSavedNickname);
+  return accountSavedNickname;
 }
 
 export async function checkNicknameAvailability(name) {
@@ -190,13 +207,15 @@ export async function syncAccountNickname() {
   try {
     const data = await api("/api/player/nickname");
     accountLoggedIn = Boolean(data.loggedIn);
-    if (data.loggedIn && data.nickname) {
-      setNickname(data.nickname);
-      return data.nickname;
+    accountSavedNickname = accountLoggedIn ? String(data.nickname || "").trim() : "";
+    if (accountLoggedIn && accountSavedNickname) {
+      setNickname(accountSavedNickname);
+      return accountSavedNickname;
     }
     return getNickname();
   } catch (_) {
     accountLoggedIn = false;
+    accountSavedNickname = "";
     return getNickname();
   }
 }

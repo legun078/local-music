@@ -13,7 +13,7 @@ from flask import Flask, Response, jsonify, redirect, request, send_from_directo
 
 import ga4_analytics
 from nickname_filter import NicknameRejected
-from minigames_nickname_registry import NicknameTaken, get_nickname_registry
+from minigames_nickname_registry import NicknameTaken, NicknameNotSaved, get_nickname_registry
 from minigames_hub import GAMES, MinigamesHub, utc_now
 from minigames_leaderboard import MinesweeperLeaderboard, leaderboard_period_meta, normalize_month_at, normalize_period, normalize_rank_tier, rank_board_spec
 from minigames_leaderboard_apple import AppleLeaderboard, apple_mode_spec, normalize_apple_mode
@@ -185,21 +185,15 @@ def _nickname_registry():
 
 
 def _resolve_player_nickname(body: dict, user: dict) -> str:
-    """로그인 사용자: 저장된 닉네임 우선·신규 시 등록."""
+    """로그인 사용자: 저장된 닉네임만 사용."""
     email = str(user.get("email") or "").strip()
     requested = str(body.get("nickname") or "").strip()
     if not email:
         return requested or str(user.get("name") or "")
-    try:
-        return _nickname_registry().resolve_for_user(
-            email,
-            requested=requested,
-            fallback_name=str(user.get("name") or ""),
-        )
-    except NicknameRejected as exc:
-        raise exc
-    except NicknameTaken as exc:
-        raise exc
+    saved = _nickname_registry().get_nickname(email)
+    if saved:
+        return saved
+    raise NicknameNotSaved(NicknameNotSaved.message)
 
 
 def _guard_leaderboard_display_name(display_name: str, user: dict) -> str:
@@ -210,8 +204,7 @@ def _guard_leaderboard_display_name(display_name: str, user: dict) -> str:
         if saved:
             _nickname_registry().assert_can_use(saved, email)
             return saved
-        if name:
-            return _nickname_registry().claim(email, name)
+        raise NicknameNotSaved(NicknameNotSaved.message)
     if name:
         _nickname_registry().assert_can_use(name, "")
     return name

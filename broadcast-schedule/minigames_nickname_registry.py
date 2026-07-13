@@ -19,6 +19,11 @@ class NicknameTaken(NicknameRejected):
     message = "이미 사용 중인 닉네임입니다."
 
 
+class NicknameNotSaved(NicknameRejected):
+    code = "nickname_not_saved"
+    message = "닉네임을 저장해 주세요."
+
+
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 

@@ -1,4 +1,4 @@
-import { api, setNickname, getNickname, bindNicknameField, defaultRoomLabel, roomPath, validateNicknameInput, isNicknameUsable, applyNicknameFieldState, syncAccountNickname, NICKNAME_TAKEN_MESSAGE } from "./api.js";
+import { api, setNickname, getNickname, bindNicknameField, defaultRoomLabel, roomPath, validateNicknameInput, isNicknameUsable, applyNicknameFieldState, syncAccountNickname, saveAccountNickname, isAccountLoggedIn, isAccountNicknameSaved, getAccountSavedNickname, NICKNAME_TAKEN_MESSAGE } from "./api.js";
 import { mountSiteAuthBar } from "./auth.js";
 import { connectLobbyEvents } from "./room-client.js";
 import { homePath, hubPath, mountBreadcrumb, escapeHtml, toast, consumeFlashToast } from "./shell.js";
@@ -44,6 +44,60 @@ export function mountGameLobby(config) {
   const roomLabelEl = document.getElementById("room-label");
   let roomLabelTouched = false;
   let rankLeaderboardMounted = false;
+  let nickSaveBtn = null;
+  let nickSaveHint = null;
+
+  function mountNicknameSaveUi() {
+    const wrap = nickEl?.closest(".mg-lobby-nick");
+    if (!wrap || document.getElementById("nickname-save-btn")) return;
+    const row = document.createElement("div");
+    row.className = "mg-lobby-nick-actions hidden";
+    row.id = "nickname-save-row";
+    row.innerHTML = `
+      <button type="button" class="btn btn-primary btn-sm" id="nickname-save-btn" disabled>닉네임 저장</button>
+      <p class="mg-field-hint" id="nickname-save-hint">로그인 계정에 등록하면 다른 사람이 같은 닉네임을 쓸 수 없어요.</p>`;
+    wrap.appendChild(row);
+    nickSaveBtn = document.getElementById("nickname-save-btn");
+    nickSaveHint = document.getElementById("nickname-save-hint");
+    nickSaveBtn?.addEventListener("click", () => void handleNicknameSave());
+  }
+
+  function syncNicknameSaveUi() {
+    const row = document.getElementById("nickname-save-row");
+    if (!row) return;
+    row.classList.toggle("hidden", !isAccountLoggedIn());
+    if (!isAccountLoggedIn() || !nickSaveBtn) return;
+    const check = validateNicknameInput(nickEl?.value);
+    const taken = nickEl?.classList.contains("is-nick-taken");
+    const checking = nickEl?.classList.contains("is-nick-checking");
+    const saved = isAccountNicknameSaved(nickEl?.value);
+    nickSaveBtn.disabled = !check.ok || taken || checking || saved;
+    nickSaveBtn.textContent = saved ? "저장됨" : "닉네임 저장";
+    if (nickSaveHint) {
+      nickSaveHint.textContent = saved
+        ? `등록된 닉네임: ${getAccountSavedNickname()}`
+        : "저장 버튼을 눌러야 멀티·랭킹에 사용할 수 있어요.";
+    }
+  }
+
+  async function handleNicknameSave() {
+    if (!nickSaveBtn) return;
+    nickSaveBtn.disabled = true;
+    try {
+      const saved = await saveAccountNickname(nickEl?.value);
+      nickEl.value = saved;
+      setNickname(saved);
+      toast(`「${saved}」 닉네임을 저장했습니다`);
+    } catch (e) {
+      toast(e.message || "닉네임 저장에 실패했습니다");
+    } finally {
+      applyNicknameFieldState(nickEl);
+      syncNicknameGate();
+      syncNicknameSaveUi();
+    }
+  }
+
+  mountNicknameSaveUi();
 
   mountBreadcrumb(document.getElementById("page-nav"), [
     { href: homePath(), label: "홈", home: true },
@@ -61,15 +115,16 @@ export function mountGameLobby(config) {
 
   function syncNicknameGate() {
     const state = nickEl?.classList.contains("is-nick-taken") ? "taken" : isNicknameUsable(nickEl?.value) ? "valid" : "invalid";
-    const usable = state === "valid";
+    const usable = state === "valid" && (!isAccountLoggedIn() || isAccountNicknameSaved(nickEl?.value));
     document.getElementById("create-btn")?.toggleAttribute("disabled", !usable);
     document.getElementById("join-code-btn")?.toggleAttribute("disabled", !usable);
+    syncNicknameSaveUi();
   }
 
   lobbyLeaderboard?.addEventListener("click", (e) => {
     const link = e.target.closest("a.mg-lb-tier-cta");
     if (!link || !lobbyLeaderboard.contains(link)) return;
-    if (!isNicknameUsable(nickEl?.value)) {
+    if (!isNicknameUsable(nickEl?.value) || (isAccountLoggedIn() && !isAccountNicknameSaved(nickEl?.value))) {
       e.preventDefault();
       requireNickname();
     }
@@ -150,6 +205,7 @@ export function mountGameLobby(config) {
     }
     applyNicknameFieldState(nickEl);
     syncNicknameGate();
+    syncNicknameSaveUi();
   }
 
   function rememberPlayer(playerId) {
@@ -213,6 +269,11 @@ export function mountGameLobby(config) {
     if (nickEl?.classList.contains("is-nick-taken")) {
       toast(NICKNAME_TAKEN_MESSAGE);
       nickEl.focus();
+      return false;
+    }
+    if (isAccountLoggedIn() && !isAccountNicknameSaved(nickEl.value)) {
+      toast("닉네임 저장 버튼을 눌러 등록해 주세요");
+      nickSaveBtn?.focus();
       return false;
     }
     return true;
