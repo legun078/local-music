@@ -12,13 +12,21 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, redirect, request, send_from_directory, stream_with_context
 
 import ga4_analytics
-from nickname_filter import NicknameRejected
+from nickname_filter import NicknameRejected, resolve_player_nickname
 from minigames_nickname_registry import NicknameTaken, NicknameNotSaved, get_nickname_registry
 from minigames_hub import GAMES, MinigamesHub, utc_now
 from minigames_leaderboard import MinesweeperLeaderboard, leaderboard_period_meta, normalize_month_at, normalize_period, normalize_rank_tier, rank_board_spec
 from minigames_leaderboard_apple import AppleLeaderboard, apple_mode_spec, normalize_apple_mode
+from minigames_leaderboard_colortiles import (
+    ColortilesLeaderboard,
+    colortiles_mode_spec,
+    is_ranked_colortiles_mode,
+    normalize_colortiles_mode,
+)
 from minigames_leaderboard_hide import HIDE_MODES, HideLeaderboard, hide_mode_spec, normalize_hide_mode
 from minigames_leaderboard_2048 import Tile2048Leaderboard, normalize_2048_mode, tile2048_mode_spec
+from minigames_leaderboard_events import LeaderboardRevisionHub
+from minigames_leaderboard_archive import RankArchive
 from minigames_hub_feed import HubFeedBuilder
 from minigames_social import inject_social_meta, is_social_crawler, social_meta_for_path
 
@@ -29,10 +37,13 @@ LEADERBOARD_PATH = DATA_DIR / "minesweeper-leaderboard.json"
 SEED_LEADERBOARD = BASE_DIR / "seed" / "minesweeper-leaderboard.json"
 APPLE_LEADERBOARD_PATH = DATA_DIR / "apple-leaderboard.json"
 SEED_APPLE_LEADERBOARD = BASE_DIR / "seed" / "apple-leaderboard.json"
+COLORTILES_LEADERBOARD_PATH = DATA_DIR / "colortiles-leaderboard.json"
+SEED_COLORTILES_LEADERBOARD = BASE_DIR / "seed" / "colortiles-leaderboard.json"
 HIDE_LEADERBOARD_PATH = DATA_DIR / "hide-leaderboard.json"
 SEED_HIDE_LEADERBOARD = BASE_DIR / "seed" / "hide-leaderboard.json"
 TILE2048_LEADERBOARD_PATH = DATA_DIR / "2048-leaderboard.json"
 SEED_TILE2048_LEADERBOARD = BASE_DIR / "seed" / "2048-leaderboard.json"
+RANK_ARCHIVE_PATH = DATA_DIR / "rank-archive.jsonl"
 NICKNAME_REGISTRY_PATH = DATA_DIR / "player-nicknames.json"
 HUB_FEED_PATH = DATA_DIR / "minigames-hub.json"
 SEED_HUB_FEED = BASE_DIR / "seed" / "minigames-hub.json"
@@ -46,8 +57,10 @@ app = Flask(__name__)
 _hub = MinigamesHub()
 _leaderboard = MinesweeperLeaderboard(LEADERBOARD_PATH)
 _apple_leaderboard = AppleLeaderboard(APPLE_LEADERBOARD_PATH)
+_colortiles_leaderboard = ColortilesLeaderboard(COLORTILES_LEADERBOARD_PATH)
 _hide_leaderboard = HideLeaderboard(HIDE_LEADERBOARD_PATH)
 _tile2048_leaderboard = Tile2048Leaderboard(TILE2048_LEADERBOARD_PATH)
+_rank_archive = RankArchive(RANK_ARCHIVE_PATH)
 _hub_feed = HubFeedBuilder(
     hub_path=HUB_FEED_PATH,
     hub_seed=SEED_HUB_FEED,
@@ -55,7 +68,9 @@ _hub_feed = HubFeedBuilder(
     apple=_apple_leaderboard,
     hide=_hide_leaderboard,
     tile2048=_tile2048_leaderboard,
+    colortiles=_colortiles_leaderboard,
 )
+_lb_events = LeaderboardRevisionHub()
 _STARTED_AT = time.time()
 
 
@@ -119,6 +134,10 @@ def _ensure_data_dir() -> None:
         APPLE_LEADERBOARD_PATH.write_text(
             SEED_APPLE_LEADERBOARD.read_text(encoding="utf-8"), encoding="utf-8"
         )
+    if not COLORTILES_LEADERBOARD_PATH.is_file() and SEED_COLORTILES_LEADERBOARD.is_file():
+        COLORTILES_LEADERBOARD_PATH.write_text(
+            SEED_COLORTILES_LEADERBOARD.read_text(encoding="utf-8"), encoding="utf-8"
+        )
     if not HIDE_LEADERBOARD_PATH.is_file() and SEED_HIDE_LEADERBOARD.is_file():
         HIDE_LEADERBOARD_PATH.write_text(
             SEED_HIDE_LEADERBOARD.read_text(encoding="utf-8"), encoding="utf-8"
@@ -128,6 +147,23 @@ def _ensure_data_dir() -> None:
             SEED_TILE2048_LEADERBOARD.read_text(encoding="utf-8"), encoding="utf-8"
         )
     get_nickname_registry(NICKNAME_REGISTRY_PATH)
+    _seed_rank_archive_from_boards()
+
+
+def _seed_rank_archive_from_boards() -> None:
+    snapshots: list[tuple[str, str, list]] = []
+    for tier in ("standard", "expert"):
+        snapshots.append(("minesweeper", tier, _leaderboard.raw_entries(tier)))
+    for mode in ("standard", "speed"):
+        snapshots.append(("apple", mode, _apple_leaderboard.raw_entries(mode)))
+        snapshots.append(("hide", mode, _hide_leaderboard.raw_entries(mode)))
+        snapshots.append(("2048", mode, _tile2048_leaderboard.raw_entries(mode)))
+    for mode in ("minute", "speedrun"):
+        snapshots.append(("colortiles", mode, _colortiles_leaderboard.raw_entries(mode)))
+    _rank_archive.seed_from_boards(snapshots)
+
+
+_ensure_data_dir()
 
 
 def _player_token() -> str:
@@ -189,7 +225,10 @@ def _resolve_player_nickname(body: dict, user: dict) -> str:
     email = str(user.get("email") or "").strip()
     requested = str(body.get("nickname") or "").strip()
     if not email:
-        return requested or str(user.get("name") or "")
+        nick = resolve_player_nickname(requested, user_name=str(user.get("name") or ""))
+        if nick:
+            _nickname_registry().assert_can_use(nick, "")
+        return nick
     saved = _nickname_registry().get_nickname(email)
     if saved:
         return saved
@@ -222,6 +261,18 @@ def _leaderboard_display_name_from_body(body: dict) -> tuple[str, NicknameReject
 def _nickname_error_response(exc: NicknameRejected):
     status = 409 if isinstance(exc, NicknameTaken) else 400
     return jsonify({"error": exc.code, "message": exc.message}), status
+
+
+def _notify_leaderboard_change(game: str = "") -> None:
+    _lb_events.bump(game)
+
+
+def _on_rank_registered(game: str, mode: str, result: dict) -> None:
+    """랭킹 등록 성공 시 알림 + 백업 아카이브."""
+    entry = result.get("entry")
+    if isinstance(entry, dict):
+        _rank_archive.append(game, mode, entry)
+    _notify_leaderboard_change(game)
 
 
 def _sse_response(stream):
@@ -307,6 +358,16 @@ def api_lobby():
 @app.route("/api/lobby/events")
 def api_lobby_events():
     return _sse_response(_hub.stream_lobby())
+
+
+@app.route("/api/leaderboard/events")
+def api_leaderboard_events():
+    return _sse_response(_lb_events.stream())
+
+
+@app.route("/api/leaderboard/revisions")
+def api_leaderboard_revisions():
+    return jsonify(_lb_events.snapshot())
 
 
 @app.route("/api/rooms", methods=["POST"])
@@ -617,6 +678,8 @@ def api_minesweeper_leaderboard_post():
     )
     if result.get("error"):
         return jsonify(result), 400
+    if result.get("registered"):
+        _on_rank_registered("minesweeper", tier, result)
     return jsonify(result)
 
 
@@ -630,6 +693,7 @@ def api_minesweeper_leaderboard_delete(entry_id: str):
         return jsonify(result), 404
     if result.get("error"):
         return jsonify(result), 400
+    _notify_leaderboard_change("minesweeper")
     return jsonify(result)
 
 
@@ -665,6 +729,8 @@ def api_apple_leaderboard_post():
     )
     if result.get("error"):
         return jsonify(result), 400
+    if result.get("registered"):
+        _on_rank_registered("apple", mode, result)
     return jsonify(result)
 
 
@@ -678,6 +744,71 @@ def api_apple_leaderboard_delete(entry_id: str):
         return jsonify(result), 404
     if result.get("error"):
         return jsonify(result), 400
+    _notify_leaderboard_change("apple")
+    return jsonify(result)
+
+
+@app.route("/api/colortiles/leaderboard", methods=["GET"])
+def api_colortiles_leaderboard_get():
+    mode = normalize_colortiles_mode(
+        request.args.get("mode") or request.args.get("durationKey") or "minute"
+    )
+    period, month_at = _leaderboard_query_args()
+    meta = colortiles_mode_spec(mode)
+    raw = _colortiles_leaderboard.raw_entries(mode)
+    period_meta = leaderboard_period_meta(raw, period, month_at)
+    return jsonify(
+        {
+            **meta,
+            **period_meta,
+            "entries": _colortiles_leaderboard.list_top(mode, period, month_at),
+            "updatedAt": utc_now(),
+        }
+    )
+
+
+@app.route("/api/colortiles/leaderboard", methods=["POST"])
+def api_colortiles_leaderboard_post():
+    body = request.get_json(silent=True) or {}
+    raw_mode = body.get("mode") or body.get("durationKey") or "minute"
+    if not is_ranked_colortiles_mode(raw_mode):
+        return jsonify(
+            {
+                "error": "not_ranked",
+                "message": "기본(2분) 모드는 랭킹에 등록되지 않습니다. 1분 또는 스피드런만 등록됩니다.",
+            }
+        ), 400
+    mode = normalize_colortiles_mode(raw_mode)
+    display_name, nick_err = _leaderboard_display_name_from_body(body)
+    if nick_err:
+        return _nickname_error_response(nick_err)
+    result = _colortiles_leaderboard.submit(
+        mode=mode,
+        score=int(body.get("score") or 0),
+        elapsed_sec=int(body.get("elapsedSec") or body.get("elapsed_sec") or 0),
+        display_name=display_name,
+        cleared=bool(body.get("cleared")),
+    )
+    if result.get("error"):
+        return jsonify(result), 400
+    if result.get("registered"):
+        _on_rank_registered("colortiles", mode, result)
+    return jsonify(result)
+
+
+@app.route("/api/colortiles/leaderboard/<entry_id>", methods=["DELETE"])
+def api_colortiles_leaderboard_delete(entry_id: str):
+    if not _auth_can_edit():
+        return jsonify({"error": "forbidden", "message": "권한이 없습니다."}), 403
+    mode = normalize_colortiles_mode(
+        request.args.get("mode") or request.args.get("durationKey") or "minute"
+    )
+    result = _colortiles_leaderboard.delete_entry(mode, entry_id)
+    if result.get("error") == "not_found":
+        return jsonify(result), 404
+    if result.get("error"):
+        return jsonify(result), 400
+    _notify_leaderboard_change("colortiles")
     return jsonify(result)
 
 
@@ -731,6 +862,8 @@ def api_2048_leaderboard_post():
     )
     if result.get("error"):
         return jsonify(result), 400
+    if result.get("registered"):
+        _on_rank_registered("2048", mode, result)
     return jsonify(result)
 
 
@@ -744,6 +877,7 @@ def api_2048_leaderboard_delete(entry_id: str):
         return jsonify(result), 404
     if result.get("error"):
         return jsonify(result), 400
+    _notify_leaderboard_change("2048")
     return jsonify(result)
 
 
@@ -761,6 +895,8 @@ def api_hide_leaderboard_post():
     )
     if result.get("error"):
         return jsonify(result), 400
+    if result.get("registered"):
+        _on_rank_registered("hide", mode, result)
     return jsonify(result)
 
 
@@ -774,6 +910,7 @@ def api_hide_leaderboard_delete(entry_id: str):
         return jsonify(result), 404
     if result.get("error"):
         return jsonify(result), 400
+    _notify_leaderboard_change("hide")
     return jsonify(result)
 
 
