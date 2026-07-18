@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#4a60a9" />
+  <title>노래책</title>
+  <script>
+    window.SCHEDULE_BASE = (function () {
+      const p = location.pathname;
+      if (p.startsWith("/schedule/test")) return "/schedule/test";
+      if (p.startsWith("/test")) return "/test";
+      if (p.startsWith("/schedule")) return "/schedule";
+      return "";
+    })();
+    if (window.SCHEDULE_BASE) {
+      const baseEl = document.createElement("base");
+      baseEl.href = `${window.SCHEDULE_BASE}/`;
+      document.head.appendChild(baseEl);
+    }
+  </script>
+  <script src="js/schedule-base.js?v=1"></script>
+  <script src="js/links-font-boot.js?v=3"></script>
+  <script src="js/pwa-head.js?v=2" defer></script>
+  <link rel="stylesheet" href="css/style.css?v=font-parity1" />
+  <link rel="stylesheet" href="css/mobile.css?v=agenda-time1" media="(max-width: 768px)" />
+  <link rel="stylesheet" href="css/links.css?v=nav-align4" />
+  <link rel="stylesheet" href="css/musicbook.css?v=detail-gradient3" />
+  <meta name="description" content="시리안 레인 노래 신청 목록" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="시리안 레인" />
+  <meta property="og:title" content="노래책" />
+  <meta property="og:description" content="시리안 레인 노래 신청 목록" />
+  <meta property="og:url" content="https://sirian-cal.com/musicbook" />
+  <meta property="og:image" content="https://sirian-cal.com/og-image.png?v=1781925690" />
+  <meta property="og:image:secure_url" content="https://sirian-cal.com/og-image.png?v=1781925690" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="노래책" />
+  <meta name="twitter:description" content="시리안 레인 노래 신청 목록" />
+  <meta name="twitter:image" content="https://sirian-cal.com/og-image.png?v=1781925690" />
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-48VK70J14R"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag("js", new Date());
+    gtag("config", "G-48VK70J14R");
+  </script>
+</head>
+<body class="musicbook-page">
+  <div class="page musicbook-layout">
+    <div class="musicbook-controls-stack">
+    <header class="musicbook-topbar panel">
+      <div class="links-hero-toolbar musicbook-toolbar">
+        <nav class="links-hero-nav" aria-label="페이지">
+          <a class="links-hero-nav-link links-hero-nav-home" data-page-href="/home" href="/home">
+            <span class="links-hero-label-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                  d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5z"/>
+                <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 21v-7h6v7"/>
+              </svg>
+            </span>
+            <span class="links-hero-nav-text">홈</span>
+          </a>
+          <span class="links-hero-nav-sep" aria-hidden="true">·</span>
+          <span class="links-hero-nav-text is-current" aria-current="page">
+            노래책<span id="beta-badge" class="beta-badge hidden" aria-label="베타">BETA</span>
+          </span>
+        </nav>
+        <div class="links-hero-toolbar-actions">
+          <a class="btn btn-ghost btn-sm musicbook-toolbar-song-request" data-page-href="/song-requests" href="/song-requests">노래책 신청</a>
+          <div id="musicbook-edit-mode-wrap" class="links-edit-mode-wrap hidden" role="group" aria-label="노래책 모드">
+            <button type="button" class="links-mode-btn is-active" data-edit-mode="false">보기</button>
+            <button type="button" class="links-mode-btn" data-edit-mode="true">수정</button>
+          </div>
+          <div id="mode-control" class="links-auth"></div>
+        </div>
+      </div>
+      <div id="musicbook-status" class="links-status" role="status" aria-live="polite"></div>
+      <div class="musicbook-search-bar">
+        <label class="musicbook-search-scope">
+          <span class="visually-hidden">검색 범위</span>
+          <select id="musicbook-search-scope" class="musicbook-input musicbook-input--sm" aria-label="검색 범위">
+            <option value="all">통합</option>
+            <option value="title">제목</option>
+            <option value="artist">아티스트</option>
+          </select>
+        </label>
+        <div class="musicbook-search-combo" id="musicbook-search-combo">
+          <label class="musicbook-search-field">
+            <span class="visually-hidden">검색</span>
+            <input
+              type="search"
+              id="musicbook-search"
+              class="musicbook-input musicbook-input--search"
+              placeholder="곡 제목·아티스트 검색"
+              autocomplete="off"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="musicbook-search-suggestions"
+              aria-activedescendant=""
+            />
+          </label>
+          <ul id="musicbook-search-suggestions" class="musicbook-suggestions hidden" role="listbox" aria-label="검색 자동완성"></ul>
+        </div>
+        <button
+          type="button"
+          id="musicbook-filters-toggle"
+          class="btn btn-ghost btn-sm musicbook-filters-toggle"
+          aria-expanded="true"
+          aria-controls="musicbook-capsules-panel"
+        >
+          필터<span id="musicbook-filters-toggle-count" class="musicbook-filters-toggle-count hidden" aria-hidden="true"></span>
+        </button>
+      </div>
+    </header>
+
+    <section class="panel musicbook-capsules-panel" id="musicbook-capsules-panel" aria-label="캡슐 필터">
+      <p class="musicbook-filter-help">같은 항목 안에서는 하나만 맞아도 되며, 항목 사이는 모두 맞아야 합니다. 좋아요 필터는 로그인 후 내가 누른 곡만 표시합니다.</p>
+      <div class="musicbook-capsules-strip">
+        <div class="musicbook-capsule-row" id="musicbook-lang-filter-group" data-filter-group="language">
+          <span class="musicbook-capsule-inline-label">언어</span>
+          <div id="musicbook-lang-capsules" class="musicbook-capsules-legend" role="group" aria-label="언어 필터"></div>
+        </div>
+        <span class="musicbook-capsule-and-sep" id="musicbook-filter-and-join" aria-hidden="true" title="언어와 숙련도 조건을 모두 만족">+</span>
+        <div class="musicbook-capsule-row" id="musicbook-prof-filter-group" data-filter-group="proficiency">
+          <span class="musicbook-capsule-inline-label">숙련도</span>
+          <div id="musicbook-capsules" class="musicbook-capsules-legend" role="group" aria-label="숙련도 필터"></div>
+        </div>
+        <span class="musicbook-capsule-and-sep" id="musicbook-liked-filter-and-join" aria-hidden="true" title="선택한 조건을 모두 만족">+</span>
+        <div class="musicbook-capsule-row musicbook-liked-filter-row" id="musicbook-liked-filter-group" data-filter-group="liked">
+          <span class="musicbook-capsule-inline-label">좋아요</span>
+          <div class="musicbook-capsules-legend musicbook-liked-filter-legend" role="group" aria-label="좋아요 필터">
+            <button
+              type="button"
+              id="musicbook-liked-filter"
+              class="legend-item musicbook-liked-filter"
+              style="--cap-bg:#f7c6d5;--cap-text:#a41242"
+              aria-pressed="false"
+              aria-label="나의 선호곡만 보기"
+            >
+              <span class="musicbook-liked-filter-heart" aria-hidden="true">♥</span>
+              나의 선호곡
+            </button>
+          </div>
+        </div>
+        <button type="button" id="capsule-add-btn" class="btn btn-ghost btn-sm musicbook-capsule-add-btn hidden" hidden aria-label="캡슐 추가">+</button>
+      </div>
+      <div id="musicbook-applied-filters" class="musicbook-applied-filters hidden" aria-live="polite">
+        <div id="musicbook-applied-filters-list" class="musicbook-applied-filters-list"></div>
+        <button type="button" id="musicbook-clear-filters" class="btn btn-ghost btn-sm musicbook-clear-filters">전체 해제</button>
+      </div>
+    </section>
+    </div>
+
+    <div class="musicbook-columns">
+      <div class="musicbook-mobile-list-chrome">
+        <div
+          id="musicbook-mobile-status-tabs"
+          class="musicbook-mobile-status-tabs"
+          role="tablist"
+          aria-label="곡 목록 구분"
+        >
+          <button
+            type="button"
+            class="musicbook-mobile-status-tab is-active"
+            data-mobile-status="available"
+            role="tab"
+            aria-selected="true"
+            aria-controls="musicbook-column-available-panel"
+            id="musicbook-mobile-tab-available"
+          >
+            신청 가능 <span class="musicbook-mobile-status-count" data-count-for="available">0</span>
+          </button>
+          <button
+            type="button"
+            class="musicbook-mobile-status-tab"
+            data-mobile-status="banned"
+            role="tab"
+            aria-selected="false"
+            aria-controls="musicbook-column-banned-panel"
+            id="musicbook-mobile-tab-banned"
+          >
+            금지 <span class="musicbook-mobile-status-count" data-count-for="banned">0</span>
+          </button>
+        </div>
+        <div id="musicbook-mobile-sort-bar" class="musicbook-mobile-sort-bar"></div>
+      </div>
+      <section
+        id="musicbook-column-available-panel"
+        class="panel musicbook-column musicbook-column--available"
+        aria-label="신청 가능한 곡"
+        role="tabpanel"
+        aria-labelledby="musicbook-mobile-tab-available"
+      >
+        <div class="musicbook-column-head">
+          <h2 class="musicbook-column-title">신청 가능 <span id="count-available" class="musicbook-column-count">0</span></h2>
+          <div class="musicbook-column-tools">
+            <label class="musicbook-tool">
+              <span class="visually-hidden">정렬</span>
+              <select id="musicbook-sort-available" class="musicbook-input musicbook-input--sm" aria-label="신청 가능 곡 정렬">
+                <option value="likes-desc">인기순</option>
+                <option value="title-asc">제목 (가나다)</option>
+                <option value="title-desc">제목 (역순)</option>
+                <option value="artist-asc">아티스트 (가나다)</option>
+                <option value="artist-desc">아티스트 (역순)</option>
+                <option value="lang-asc">언어</option>
+                <option value="capsule-asc">숙련도</option>
+                <option value="updated-desc">최근 수정</option>
+              </select>
+            </label>
+            <button type="button" id="musicbook-add-available" class="btn btn-primary btn-sm hidden" hidden>+ 추가</button>
+          </div>
+        </div>
+        <div class="musicbook-column-body">
+          <ul id="musicbook-list-available" class="highlights musicbook-list"></ul>
+          <div id="musicbook-empty-available" class="highlights-empty musicbook-empty hidden" role="status">
+            <span class="highlights-empty-icon" aria-hidden="true">🎵</span>
+            <p class="highlights-empty-title">표시할 곡이 없습니다.</p>
+            <p class="highlights-empty-hint musicbook-empty-hint hidden"></p>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="musicbook-column-banned-panel"
+        class="panel musicbook-column musicbook-column--banned"
+        aria-label="금지곡"
+        role="tabpanel"
+        aria-labelledby="musicbook-mobile-tab-banned"
+      >
+        <div class="musicbook-column-head">
+          <h2 class="musicbook-column-title">금지 <span id="count-banned" class="musicbook-column-count">0</span></h2>
+          <div class="musicbook-column-tools">
+            <label class="musicbook-tool">
+              <span class="visually-hidden">정렬</span>
+              <select id="musicbook-sort-banned" class="musicbook-input musicbook-input--sm" aria-label="금지곡 정렬">
+                <option value="title-asc">제목 (가나다)</option>
+                <option value="title-desc">제목 (역순)</option>
+                <option value="artist-asc">아티스트 (가나다)</option>
+                <option value="artist-desc">아티스트 (역순)</option>
+                <option value="updated-desc">최근 수정</option>
+              </select>
+            </label>
+            <button type="button" id="musicbook-add-banned" class="btn btn-primary btn-sm hidden" hidden>+ 추가</button>
+          </div>
+        </div>
+        <div class="musicbook-column-body">
+          <ul id="musicbook-list-banned" class="highlights musicbook-list musicbook-list--compact"></ul>
+          <div id="musicbook-empty-banned" class="highlights-empty musicbook-empty hidden" role="status">
+            <span class="highlights-empty-icon" aria-hidden="true">🚫</span>
+            <p class="highlights-empty-title">금지곡이 없습니다.</p>
+            <p class="highlights-empty-hint musicbook-empty-hint hidden"></p>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section id="musicbook-font-panel" class="panel layout-panel musicbook-font-panel hidden" aria-label="글꼴 설정">
+      <div class="panel-head">
+        <h3>글꼴</h3>
+      </div>
+      <div id="musicbook-font-options" aria-label="폰트 설정"></div>
+      <p id="musicbook-font-credit" class="musicbook-foot font-credit hidden" hidden aria-hidden="true"></p>
+    </section>
+
+    <p class="site-page-foot site-page-foot--minimal" role="note">곡 목록은 방송 상황에 따라 변경될 수 있습니다.</p>
+  </div>
+
+  <div id="musicbook-detail-modal" class="slot-edit-modal musicbook-detail-modal hidden" aria-hidden="true">
+    <div class="slot-edit-backdrop musicbook-detail-backdrop"></div>
+    <div class="slot-edit-card musicbook-detail-card" role="dialog" aria-modal="true" aria-labelledby="musicbook-detail-title">
+      <div class="musicbook-detail-head">
+        <h3 id="musicbook-detail-title">곡 상세</h3>
+        <div class="musicbook-detail-head-actions">
+          <button type="button" id="musicbook-detail-edit" class="btn btn-ghost btn-sm musicbook-detail-edit hidden">수정</button>
+          <button type="button" class="musicbook-detail-close" aria-label="닫기">
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M6 6l12 12M18 6 6 18"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div id="musicbook-detail-body" class="musicbook-detail-body"></div>
+    </div>
+  </div>
+
+  <div id="song-modal" class="slot-edit-modal hidden" aria-hidden="true">
+    <div class="slot-edit-backdrop"></div>
+    <div class="slot-edit-card" role="dialog" aria-modal="true" aria-labelledby="song-modal-title">
+      <h3 id="song-modal-title">곡 추가</h3>
+      <form id="song-form" class="song-form" novalidate>
+        <input type="hidden" id="song-id" name="id" />
+        <input type="hidden" id="song-status" name="status" value="available" />
+        <label id="song-lang-wrap">
+          언어
+          <select id="song-language" name="language"></select>
+        </label>
+        
+        <label>
+          제목
+          <input type="text" id="song-title" name="title" maxlength="200" autocomplete="off" />
+        </label>
+        <label id="song-artist-wrap">
+          아티스트
+          <div class="musicbook-field-combo">
+            <input
+              type="text"
+              id="song-artist"
+              name="artist"
+              maxlength="200"
+              autocomplete="off"
+              role="combobox"
+              aria-autocomplete="list"
+              aria-expanded="false"
+              aria-controls="song-artist-suggestions"
+            />
+            <ul id="song-artist-suggestions" class="musicbook-suggestions hidden" role="listbox" aria-label="아티스트 자동완성"></ul>
+          </div>
+        </label>
+        <label id="song-pitch-wrap">
+          음정 (키)
+          <input
+            type="number"
+            id="song-pitch"
+            name="pitchShift"
+            class="musicbook-input"
+            min="-6"
+            max="6"
+            step="1"
+            inputmode="numeric"
+            placeholder="0"
+            aria-describedby="song-pitch-hint"
+          />
+          <small id="song-pitch-hint" class="slot-edit-hint">-6 ~ +6 (비우거나 0이면 원곡)</small>
+        </label>
+        <label id="song-capsule-wrap">
+          숙련도
+          <select id="song-capsule" name="capsule">
+            <option value="">없음</option>
+          </select>
+        </label>
+        <label>
+          유튜브 링크
+          <input type="url" id="song-youtube" name="youtubeUrl" maxlength="500" placeholder="https://youtu.be/..." autocomplete="off" />
+        </label>
+        <label>
+          비고
+          <textarea id="song-note" name="note" rows="3" maxlength="500" placeholder="예: ○○ 애니 오프닝, ○○ 방송에서 나온 곡"></textarea>
+        </label>
+        <div class="slot-edit-actions musicbook-modal-actions">
+          <button type="button" id="song-delete-btn" class="btn btn-danger btn-ghost hidden">삭제</button>
+          <span class="musicbook-modal-spacer"></span>
+          <button type="button" class="btn btn-ghost song-modal-cancel">취소</button>
+          <button type="submit" class="btn btn-primary">저장</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div id="capsule-add-modal" class="slot-edit-modal hidden" aria-hidden="true">
+    <div class="slot-edit-backdrop capsule-add-backdrop"></div>
+    <div class="slot-edit-card" role="dialog" aria-modal="true" aria-labelledby="capsule-add-modal-title">
+      <h3 id="capsule-add-modal-title">캡슐 추가</h3>
+      <form id="capsule-add-form" class="song-form" novalidate>
+        <label>
+          카테고리
+          <select id="capsule-add-group" name="group">
+            <option value="language">언어</option>
+            <option value="proficiency">숙련도</option>
+          </select>
+        </label>
+        <label>
+          이름
+          <input type="text" id="capsule-add-label" name="label" maxlength="40" autocomplete="off" placeholder="예: 중국어, 코러스만" />
+        </label>
+        <label class="capsule-add-color-field">
+          색상
+          <input type="color" id="capsule-add-color" name="color" value="#e8ecf2" aria-label="캡슐 색상" />
+        </label>
+        <div class="slot-edit-actions musicbook-modal-actions">
+          <span class="musicbook-modal-spacer"></span>
+          <button type="button" class="btn btn-ghost capsule-add-cancel">취소</button>
+          <button type="submit" class="btn btn-primary">추가</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <nav id="capsule-ctx-menu" class="ctx-menu hidden">
+    <label class="ctx-menu-color-row">
+      <span>색상 변경</span>
+      <input type="color" id="capsule-color-picker" aria-label="캡슐 색상" />
+    </label>
+    <button type="button" data-capsule-action="rename">이름 변경</button>
+    <button type="button" data-capsule-action="delete" class="danger">삭제</button>
+  </nav>
+
+  <script>
+    (function () {
+      const base = window.SCHEDULE_BASE || "";
+      document.querySelectorAll("[data-legal-href], [data-page-href]").forEach((el) => {
+        const key = el.hasAttribute("data-legal-href") ? "data-legal-href" : "data-page-href";
+        el.href = base + el.getAttribute(key);
+      });
+    })();
+  </script>
+  <script type="module" src="js/musicbook.js?v=updated-sort1"></script>
+  <script src="js/pwa-register.js?v=1" defer></script>
+</body>
+</html>
