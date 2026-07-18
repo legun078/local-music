@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#4a60a9" />
+  <title>방송일정</title>
+  <script>
+    window.SCHEDULE_BASE = (function () {
+      const p = location.pathname;
+      if (p.startsWith("/schedule/test")) return "/schedule/test";
+      if (p.startsWith("/test")) return "/test";
+      if (p.startsWith("/schedule")) return "/schedule";
+      return "";
+    })();
+    if (window.SCHEDULE_BASE) {
+      const baseEl = document.createElement("base");
+      baseEl.href = `${window.SCHEDULE_BASE}/`;
+      document.head.appendChild(baseEl);
+    }
+  </script>
+  <script src="js/schedule-base.js?v=1"></script>
+  <script src="js/links-font-boot.js?v=3"></script>
+  <script src="js/pwa-head.js?v=2" defer></script>
+  <link rel="stylesheet" href="css/style.css?v=slot-hour-scroll1" />
+  <link rel="stylesheet" href="css/links.css?v=nav-align4" />
+  <link rel="stylesheet" href="css/mobile.css?v=cal-slot-hover1" media="(max-width: 768px)" />
+  <script>
+    document.documentElement.classList.add("display-timeline");
+    document.documentElement.classList.add("slot-chip-style-sidebar");
+    if (window.matchMedia("(max-width: 768px)").matches) {
+      document.documentElement.classList.add("is-mobile-view");
+    }
+  </script>
+  <meta name="description" content="시리안_레인 방송 일정표" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="시리안 레인" />
+  <meta property="og:title" content="방송일정" />
+  <meta property="og:description" content="시리안_레인 방송 일정표" />
+  <meta property="og:url" content="https://sirian-cal.com/calendar" />
+  <meta property="og:image" content="https://sirian-cal.com/og-image.png?v=1781925690" />
+  <meta property="og:image:secure_url" content="https://sirian-cal.com/og-image.png?v=1781925690" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:type" content="image/png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="방송일정" />
+  <meta name="twitter:description" content="시리안_레인 방송 일정표" />
+  <meta name="twitter:image" content="https://sirian-cal.com/og-image.png?v=1781925690" />
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-48VK70J14R"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag("js", new Date());
+    gtag("config", "G-48VK70J14R");
+  </script>
+</head>
+<body>
+  <div id="mobile-top-veil" class="mobile-top-veil" aria-hidden="true"></div>
+  <div class="page">
+    <main class="layout">
+      <div class="calendar-column">
+        <section class="calendar-wrap">
+          <div class="weekdays">
+            <span>일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+          </div>
+          <div id="calendar" class="calendar"></div>
+        </section>
+        <div id="mobile-agenda" class="mobile-agenda hidden" aria-label="일정 목록"></div>
+      </div>
+
+      <aside class="sidebar">
+        <header class="header header--sidebar panel">
+          <div class="header-top-row">
+            <nav class="links-hero-nav calendar-page-nav" aria-label="페이지">
+              <h1 id="page-title" class="links-hero-nav-text is-current page-title" aria-current="page">방송일정<span id="beta-badge" class="beta-badge hidden" aria-label="베타">BETA</span></h1>
+            </nav>
+            <div class="header-toolbar">
+              <div id="calendar-edit-mode-wrap" class="calendar-edit-mode-wrap hidden" role="group" aria-label="캘린더 모드">
+                <button type="button" class="calendar-mode-btn is-active" data-edit-mode="false">보기</button>
+                <button type="button" class="calendar-mode-btn" data-edit-mode="true">수정</button>
+              </div>
+              <div id="mode-control" class="header-auth"></div>
+            </div>
+          </div>
+          <div class="header-month">
+            <button id="prev-month" class="nav-btn" aria-label="이전 달">◀</button>
+            <span id="month-title" class="month-title">—</span>
+            <button id="next-month" class="nav-btn" aria-label="다음 달">▶</button>
+          </div>
+          <div class="header-mobile-foot" aria-label="빠른 이동">
+            <button type="button" id="mobile-scroll-today" class="header-mobile-quick-btn" aria-label="오늘 날짜로 이동">오늘</button>
+            <div id="debut-day" class="debut-day hidden" aria-label="데뷔일">
+              <span id="debut-day-value" class="debut-day-value">D+1</span>
+              <span class="debut-day-kicker">데뷔</span>
+            </div>
+            <a id="mobile-nav-home" class="header-home-icon-btn" data-page-href="/home" href="/home" aria-label="홈으로 이동">
+              <span class="header-home-icon-btn__glyph" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false">
+                  <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                    d="M4 10.5 12 4l8 6.5V20a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 20v-9.5z"/>
+                  <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M9 21v-7h6v7"/>
+                </svg>
+              </span>
+            </a>
+          </div>
+        </header>
+
+        <button type="button" id="btn-calendar-subscribe" class="panel calendar-subscribe-panel" aria-haspopup="dialog">
+          <span class="calendar-subscribe-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" focusable="false">
+              <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                d="M8 4v2M16 4v2M4 9h16"/>
+              <rect fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" rx="2" x="4" y="6" width="16" height="14"/>
+            </svg>
+          </span>
+          <span class="calendar-subscribe-body">
+            <span class="calendar-subscribe-title">캘린더 구독</span>
+            <span class="calendar-subscribe-desc">내 캘린더에 일정 추가하기</span>
+          </span>
+        </button>
+
+        <section class="panel highlights-panel">
+          <div class="panel-head">
+            <h3>주요 일정</h3>
+            <span id="hl-count" class="hl-count hidden" aria-label="주요 일정 개수"></span>
+          </div>
+          <ul id="highlights" class="highlights"></ul>
+        </section>
+
+        <section id="legend-panel" class="panel legend-panel">
+          <div class="panel-head">
+            <h3>카테고리</h3>
+            <button type="button" id="cat-add-btn" class="btn btn-ghost btn-sm hidden">+ 추가</button>
+          </div>
+          <div id="legend" class="legend"></div>
+        </section>
+
+        <section id="layout-panel" class="panel layout-panel hidden" aria-label="캘린더 디자인">
+          <div class="panel-head">
+            <h3>캘린더 디자인</h3>
+          </div>
+          <div id="layout-options" class="layout-options" role="radiogroup" aria-label="캘린더 표시 방식"></div>
+          <div id="layout-font-options" aria-label="폰트 설정"></div>
+        </section>
+
+        <p class="site-page-foot site-page-foot--minimal calendar-page-note" role="note">방송 일정은 사정에 따라 변경될 수 있습니다.</p>
+      </aside>
+    </main>
+  </div>
+
+  <div id="day-modal" class="day-modal hidden" aria-hidden="true">
+    <div class="day-modal-backdrop"></div>
+    <div class="day-modal-card" role="dialog" aria-modal="true" aria-labelledby="day-modal-title">
+      <div class="day-modal-header">
+        <div class="day-modal-header-text">
+          <p class="day-modal-kicker" id="day-modal-kicker"></p>
+          <h2 id="day-modal-title">—</h2>
+        </div>
+        <button type="button" class="day-modal-close" aria-label="닫기">×</button>
+      </div>
+      <div id="day-modal-body" class="day-modal-body">
+        <div id="day-modal-bangon-wrap" class="day-modal-bangon-wrap hidden"></div>
+        <div id="day-modal-schedule" class="day-modal-schedule"></div>
+      </div>
+      <div id="day-modal-actions" class="day-modal-actions hidden">
+        <button type="button" id="day-modal-add" class="btn btn-primary">+ 일정 추가</button>
+        <button type="button" id="day-modal-clear" class="btn btn-danger btn-ghost">하루 전체 삭제</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="slot-edit-modal" class="slot-edit-modal hidden">
+    <div class="slot-edit-backdrop"></div>
+    <div class="slot-edit-card" role="dialog" aria-modal="true" aria-labelledby="slot-edit-title">
+      <header class="slot-edit-header">
+        <h3 id="slot-edit-title">일정 편집</h3>
+      </header>
+      <div class="slot-edit-body">
+        <div class="slot-edit-block">
+          <label class="slot-edit-field-label" for="slot-edit-text">내용</label>
+          <textarea id="slot-edit-text" class="slot-edit-control" rows="3" placeholder="컨텐츠 내용"></textarea>
+          <small class="slot-edit-hint">Shift+Enter 줄바꿈 · Enter 저장</small>
+        </div>
+
+        <div class="slot-edit-row slot-edit-row--2">
+          <label class="slot-edit-block">
+            <span class="slot-edit-field-label">멤버</span>
+            <input id="slot-edit-members" class="slot-edit-control" type="text" placeholder="선택 · 필수 아님" autocomplete="off" />
+          </label>
+          <label class="slot-edit-block">
+            <span class="slot-edit-field-label">카테고리</span>
+            <select id="slot-edit-category" class="slot-edit-control"></select>
+          </label>
+        </div>
+
+        <div class="slot-edit-block slot-edit-link-wrap">
+          <div class="slot-edit-link-head">
+            <span class="slot-edit-field-label">링크 <span class="field-optional">(선택)</span></span>
+            <div class="slot-edit-link-type" role="radiogroup" aria-label="링크 종류">
+              <label class="slot-edit-link-type-option">
+                <input type="radio" name="slot-edit-link-type" value="general" checked />
+                <span>일반</span>
+              </label>
+              <label class="slot-edit-link-type-option">
+                <input type="radio" name="slot-edit-link-type" value="broadcast" />
+                <span>방송국</span>
+              </label>
+            </div>
+          </div>
+          <div class="slot-edit-link-fields">
+            <input id="slot-edit-link-label" class="slot-edit-control" type="text" maxlength="80" placeholder="표시 이름" autocomplete="off" aria-label="링크 표시 이름" />
+            <input id="slot-edit-link-url" class="slot-edit-control" type="url" maxlength="500" placeholder="https://..." autocomplete="off" aria-label="링크 주소" />
+          </div>
+        </div>
+
+        <div id="slot-edit-start-wrap" class="slot-edit-block">
+          <span class="slot-edit-field-label">시작 시간</span>
+          <div id="slot-edit-start-picker" class="slot-start-picker-mount" role="group" aria-label="시작 시간"></div>
+          <input type="hidden" id="slot-edit-start-time" value="" />
+        </div>
+        <label class="slot-edit-block">
+          <span class="slot-edit-field-label">소요 시간</span>
+          <select id="slot-edit-hours" class="slot-edit-control"></select>
+        </label>
+      </div>
+      <div class="slot-edit-actions">
+        <button type="button" id="slot-edit-delete" class="btn btn-danger">삭제</button>
+        <button type="button" class="btn btn-ghost slot-edit-cancel">취소</button>
+        <button type="button" id="slot-edit-save" class="btn btn-primary">저장</button>
+      </div>
+    </div>
+  </div>
+
+  <nav id="ctx-menu" class="ctx-menu hidden">
+    <button type="button" data-action="add">+ 일정 추가</button>
+    <button type="button" data-action="edit">수정</button>
+    <button type="button" data-action="copy">복사</button>
+    <button type="button" data-action="paste">붙여넣기</button>
+    <button type="button" data-action="move-part" class="hidden">2부로 이동</button>
+    <button type="button" data-action="add-highlight" class="hidden">주요일정에 넣기</button>
+    <button type="button" data-action="up">↑ 순서 올리기</button>
+    <button type="button" data-action="down">↓ 순서 내리기</button>
+    <button type="button" data-action="delete" class="danger">삭제</button>
+    <button type="button" data-action="remove-highlight" class="danger hidden">주요일정에서 제외</button>
+    <button type="button" data-action="clear-day" class="danger">하루 전체 삭제</button>
+  </nav>
+
+  <nav id="cat-ctx-menu" class="ctx-menu hidden">
+    <label class="ctx-menu-color-row">
+      <span>색상 변경</span>
+      <input type="color" id="cat-color-picker" aria-label="카테고리 색상" />
+    </label>
+    <button type="button" data-cat-action="rename">이름 변경</button>
+    <button type="button" data-cat-action="delete" class="danger">삭제</button>
+  </nav>
+
+  <div id="save-toast" class="save-toast hidden"></div>
+
+  <dialog id="ics-dialog" class="app-dialog ics-dialog">
+    <form method="dialog">
+      <div class="app-dialog-scroll">
+      <h2 class="app-dialog-title">캘린더 구독</h2>
+      <p class="app-dialog-lead">
+        이 사이트의 방송 일정을 <strong>내 휴대폰·컴퓨터 캘린더 앱</strong>에 넣을 수 있어요.
+        한 번만 연결해 두면, 여기 일정이 바뀔 때 캘린더에도 자동으로 반영됩니다.
+      </p>
+
+      <div class="ics-subscribe-actions">
+        <div class="ics-action-block">
+          <a id="btn-open-apple" class="btn btn-primary ics-subscribe-btn" href="#">Apple 캘린더 구독</a>
+          <p class="ics-action-hint">iPhone, iPad, Mac 기본 캘린더 앱 사용자</p>
+        </div>
+        <div class="ics-action-block">
+          <a id="btn-open-google" class="btn btn-ghost ics-subscribe-btn" href="#" target="_blank" rel="noopener">Google Calendar</a>
+          <p class="ics-action-hint">Android(갤럭시·삼성 캘린더 포함), PC — Google 계정 연동</p>
+        </div>
+      </div>
+
+      <div class="ics-guide">
+        <h3 class="ics-guide-title">기기별 따라하기</h3>
+
+        <section class="ics-guide-section">
+          <h4 class="ics-guide-heading">iPhone · iPad</h4>
+          <ol class="ics-guide-steps">
+            <li>위 <strong>「Apple 캘린더 구독」</strong> 버튼을 누르세요.</li>
+            <li>「열기」「구독」 같은 안내가 나오면 <strong>허용</strong> 또는 <strong>구독</strong>을 선택하세요.</li>
+            <li>홈 화면의 <strong>캘린더</strong> 앱을 열면 방송 일정이 보입니다.</li>
+            <li>안 보이면 캘린더 앱 하단 <strong>캘린더</strong> 탭에서 방송 일정 캘린더가 켜져 있는지 확인하세요.</li>
+          </ol>
+        </section>
+
+        <section class="ics-guide-section">
+          <h4 class="ics-guide-heading">Mac</h4>
+          <ol class="ics-guide-steps">
+            <li><strong>「Apple 캘린더 구독」</strong> 버튼을 클릭하세요.</li>
+            <li>캘린더 앱이 열리면 <strong>구독</strong>을 누르세요.</li>
+            <li>왼쪽 목록에 새 캘린더가 추가되면 연결 완료입니다.</li>
+          </ol>
+        </section>
+
+        <section class="ics-guide-section">
+          <h4 class="ics-guide-heading">Android · PC (Google 캘린더)</h4>
+          <ol class="ics-guide-steps">
+            <li><strong>「Google Calendar」</strong> 버튼을 누르세요.</li>
+            <li>Google 계정으로 로그인되어 있어야 합니다.</li>
+            <li>「캘린더 추가」 화면이 나오면 <strong>추가</strong> 또는 <strong>Add</strong>를 선택하세요.</li>
+            <li>Google 캘린더 앱 또는 <strong>calendar.google.com</strong>에서 일정을 확인할 수 있습니다.</li>
+          </ol>
+        </section>
+
+        <section class="ics-guide-section">
+          <h4 class="ics-guide-heading">갤럭시 · 삼성 캘린더</h4>
+          <p class="ics-guide-note">삼성 기본 캘린더 앱은 주소(URL)로 직접 구독하는 기능이 없어요. <strong>Google 캘린더에 먼저 추가</strong>한 뒤, 삼성 캘린더와 동기화하면 됩니다.</p>
+          <ol class="ics-guide-steps">
+            <li>위 <strong>「Google Calendar」</strong> 버튼을 눌러 Google 캘린더에 일정을 추가하세요.</li>
+            <li><strong>삼성 캘린더</strong> 앱을 열고, 왼쪽 <strong>≡ 메뉴</strong> → 맨 아래 <strong>지금 동기화</strong>를 누르세요.</li>
+            <li>일정이 안 보이면 <strong>≡ 메뉴</strong> → <strong>톱니바퀴(설정)</strong> → <strong>관리</strong>에서 Google 계정이 켜져 있는지, <strong>캘린더</strong> 표시가 체크되어 있는지 확인하세요.</li>
+            <li>버튼이 잘 안 되면 PC에서 <strong>calendar.google.com</strong> → <strong>다른 캘린더</strong> 옆 <strong>+</strong> → <strong>URL로 추가</strong>에 아래 HTTPS 주소를 붙여 넣은 뒤, 휴대폰에서 <strong>지금 동기화</strong>하세요.</li>
+          </ol>
+        </section>
+      </div>
+
+      <details class="ics-url-details">
+        <summary>버튼이 안 될 때 — 주소(URL) 직접 복사</summary>
+        <p class="ics-url-lead">Apple은 webcal, Google·갤럭시(삼성 캘린더)는 HTTPS 주소를 사용하세요. 갤럭시는 Google 캘린더에 URL을 추가한 뒤 삼성 캘린더와 동기화합니다.</p>
+        <label class="ics-field">
+          <span class="ics-field-label">Apple 기기용 (webcal)</span>
+          <a id="link-webcal" class="ics-tap-link" href="#">링크를 탭해 열기</a>
+          <div class="ics-url-box">
+            <input id="webcal-url" type="text" readonly />
+            <button type="button" id="btn-copy-webcal" class="btn btn-ghost btn-sm">복사</button>
+          </div>
+        </label>
+        <label class="ics-field">
+          <span class="ics-field-label">Google · 갤럭시 · 기타 (https)</span>
+          <a id="link-https" class="ics-tap-link" href="#" target="_blank" rel="noopener">링크를 탭해 열기</a>
+          <div class="ics-url-box">
+            <input id="ics-url" type="text" readonly />
+            <button type="button" id="btn-copy-ics" class="btn btn-ghost btn-sm">복사</button>
+          </div>
+        </label>
+      </details>
+
+      <ul class="ics-help">
+        <li><strong>자동 갱신:</strong> 사이트에서 일정을 바꾸면 캘린더 앱이 주기적으로 다시 받아옵니다. 보통 몇 시간 안에 반영되며, 앱마다 최대 하루 정도 걸릴 수 있습니다.</li>
+        <li><strong>다시 연결:</strong> 같은 버튼·같은 주소로 다시 구독하면 됩니다. 예전 연결을 지우고 새로 추가해도 괜찮습니다.</li>
+        <li><strong>문제가 있을 때:</strong> Wi‑Fi·데이터 연결을 확인하고, 캘린더 앱을 한 번 닫았다가 다시 열어 보세요.</li>
+      </ul>
+      </div>
+      <div class="app-dialog-actions">
+        <button type="submit" class="btn btn-ghost">닫기</button>
+      </div>
+    </form>
+  </dialog>
+
+  <nav class="mobile-tab-bar hidden" aria-label="화면 전환" aria-hidden="true">
+    <button type="button" class="mobile-tab active" data-mobile-tab="calendar" aria-pressed="true">
+      <span class="mobile-tab-icon" aria-hidden="true">▦</span>
+      <span class="mobile-tab-label">일정</span>
+    </button>
+    <button type="button" class="mobile-tab mobile-tab--subscribe" data-mobile-action="subscribe" aria-haspopup="dialog" aria-label="캘린더 구독">
+      <span class="mobile-tab-icon mobile-tab-icon--svg" aria-hidden="true">
+        <svg viewBox="0 0 24 24" focusable="false">
+          <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            d="M8 4v2M16 4v2M4 9h16"/>
+          <rect fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" rx="2" x="4" y="6" width="16" height="14"/>
+        </svg>
+      </span>
+      <span class="mobile-tab-label">구독</span>
+    </button>
+    <button type="button" class="mobile-tab" data-mobile-tab="highlights" aria-pressed="false">
+      <span class="mobile-tab-icon" aria-hidden="true">★</span>
+      <span class="mobile-tab-label">주요일정</span>
+    </button>
+  </nav>
+
+  <script>
+    (function () {
+      const base = window.SCHEDULE_BASE || "";
+      document.querySelectorAll("[data-legal-href], [data-page-href]").forEach((el) => {
+        const key = el.hasAttribute("data-legal-href") ? "data-legal-href" : "data-page-href";
+        el.href = base + el.getAttribute(key);
+      });
+    })();
+  </script>
+  <script type="module" src="js/app.js?v=bangon-hour1"></script>
+  <script src="js/pwa-register.js?v=1" defer></script>
+</body>
+</html>
