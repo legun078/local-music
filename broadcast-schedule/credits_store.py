@@ -3161,6 +3161,7 @@ def build_demo_credits_payload() -> dict[str, Any]:
             },
             "upGain": 3420,
             "balloonTotal": 12480,
+            "donationCount": 14,
         },
         "metricsSeries": {
             "viewers": [
@@ -3962,6 +3963,19 @@ class CreditsStore:
                 out["metricsSeries"] = empty_metrics_series()
             info = out.setdefault("info", {})
             if isinstance(info, dict):
+                if not int(info.get("donationCount") or 0):
+                    donations = (
+                        session.get("donations")
+                        if isinstance(session.get("donations"), dict)
+                        else {}
+                    )
+                    donor_n = sum(
+                        1
+                        for row in donations.values()
+                        if isinstance(row, dict) and int(row.get("total") or 0) > 0
+                    )
+                    if donor_n:
+                        info["donationCount"] = donor_n
                 if info.get("balloonTotal") is None and session.get("balloonTotal") is not None:
                     info["balloonTotal"] = int(session.get("balloonTotal") or 0)
                 if info.get("upGain") is None and session.get("upGain") is not None:

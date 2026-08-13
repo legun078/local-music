@@ -809,7 +809,7 @@
       const coverTitle = textField("coverOpen", "title", "ENDING CREDITS");
       const coverSub = textField("coverOpen", "sub", "");
       const dateLabel = stampDateLabel({ info }) || String(info.dateLabel || "").trim();
-      const isDemo = Boolean(data?.demo) || onlyId === "coverOpen";
+      const isDemo = Boolean(data?.demo);
       // 기본 히어로「오늘의 방송 보고서」· 스튜디오 value 커스텀 시 그대로 사용
       let hero = "오늘의 방송 보고서";
       if (coverValue && coverValue !== "SIRIAN RAIN") hero = coverValue;
@@ -842,7 +842,7 @@
       Number(info.chatters) > 0 ||
       Boolean(String(info.peakThumbUrl || "").trim());
     if (want("summary") && isEnabled("summary") && (hasSummaryData || onlyId === "summary")) {
-      const peakViewers = Number(info.peakViewers) || (onlyId === "summary" ? 1284 : 0);
+      const peakViewers = Number(info.peakViewers) || (Boolean(data?.demo) ? 1284 : 0);
       const donationCount =
         Number(info.donationCount) ||
         Number(info.donorCount) ||
@@ -874,21 +874,21 @@
           : startClock
             ? `${startClock} –`
             : "";
-      const isDemoSummary = Boolean(data?.demo) || onlyId === "summary";
+      const isDemoSummary = Boolean(data?.demo);
       slides.push({
         id: "summary",
         kind: "summary",
         title: textField("summary", "title", "오늘의 방송 요약"),
         holoTitle: "방송 요약",
         peakLabel: textField("summary", "peakLabel", "최고 시청 순간"),
-        durationLabel: info.durationLabel || (onlyId === "summary" ? "2시간 15분" : ""),
+        durationLabel: info.durationLabel || (isDemoSummary ? "2시간 15분" : ""),
         peakViewers,
-        peakAtLabel: info.peakAtLabel || (onlyId === "summary" ? "22:41" : ""),
+        peakAtLabel: info.peakAtLabel || (isDemoSummary ? "22:41" : ""),
         peakTitle: info.peakTitle || "",
         broadcastTitle: String(info.title || info.peakTitle || "").trim(),
         peakThumbUrl: mediaUrl(info.peakThumbUrl || ""),
-        chatters: Number(info.chatters) || (onlyId === "summary" ? 456 : 0),
-        chatCount: Number(info.chatCount) || (onlyId === "summary" ? 7890 : 0),
+        chatters: Number(info.chatters) || (isDemoSummary ? 456 : 0),
+        chatCount: Number(info.chatCount) || (isDemoSummary ? 7890 : 0),
         donationCount,
         subscribeCount,
         timeRangeLabel,
@@ -937,9 +937,9 @@
           kind: "highlight",
           title: textField("highlight", "title", "하이라이트"),
           peakLabel: textField("summary", "peakLabel", "최고 시청 순간"),
-          peakViewers: peakViewersHl || (onlyId === "highlight" ? 1234 : 0),
-          peakAtLabel: peakAt || (onlyId === "highlight" ? "19:53" : ""),
-          peakTitle: peakTitle || (onlyId === "highlight" ? "데모 Q&A 구간" : ""),
+          peakViewers: peakViewersHl || (Boolean(data?.demo) ? 1234 : 0),
+          peakAtLabel: peakAt || (Boolean(data?.demo) ? "19:53" : ""),
+          peakTitle: peakTitle || (Boolean(data?.demo) ? "데모 Q&A 구간" : ""),
           peakThumbUrl: peakThumb,
           duration: durationFor("highlight", slideMs + 400),
         });
@@ -954,7 +954,7 @@
       const viewerVals = rawViewers
         .map((p) => (p && typeof p === "object" ? Number(p.v) : Number(p)))
         .filter((n) => Number.isFinite(n) && n >= 0);
-      const isDemoAn = Boolean(data?.demo) || onlyId === "analytics";
+      const isDemoAn = Boolean(data?.demo);
       const demoViewers = [320, 480, 620, 780, 910, 1050, 1234, 1180, 980, 860, 740, 690, 640, 580];
       const viewers = viewerVals.length >= 2 ? viewerVals : isDemoAn ? demoViewers : [];
       const avg =
@@ -1227,10 +1227,9 @@
       const y = new Date().getFullYear();
       return `${y}.${String(m[1]).padStart(2, "0")}.${String(m[2]).padStart(2, "0")}`;
     })();
-    const stampDoc =
-      Boolean(data?.demo) || onlyId
-        ? String(info.docId || "TEST-0801").trim() || "TEST-0801"
-        : String(info.docId || "").trim();
+    const stampDoc = Boolean(data?.demo)
+      ? String(info.docId || "TEST-0801").trim() || "TEST-0801"
+      : String(info.docId || "").trim();
     for (const s of slides) {
       if (!s || typeof s !== "object") continue;
       if (!s.dateLabel) s.dateLabel = stampLabel;
@@ -2504,6 +2503,9 @@
     } else if (archive) {
       params.set("archive", String(archive).trim());
       params.delete("demo");
+    } else {
+      params.delete("demo");
+      params.delete("archive");
     }
     try {
       const url = new URL(location.href);
@@ -2529,7 +2531,7 @@
       let creditsQs = "";
       if (archiveId) {
         creditsQs = `?archive=${encodeURIComponent(archiveId)}&viewer=1`;
-      } else if (demoFlag || isPreview || isStudioEmbed) {
+      } else if (demoFlag) {
         creditsQs = "?demo=1&viewer=1";
       } else {
         creditsQs = "?viewer=1";
@@ -2809,7 +2811,7 @@
       if (msg.config) applyConfig(msg.config);
       setStudioDataSource({
         archive: msg.archive || "",
-        demo: Boolean(msg.demo) || !msg.archive,
+        demo: Boolean(msg.demo),
       });
       isPlaying = false;
       els.body.classList.remove("is-playing");
