@@ -40,8 +40,6 @@
     dataBody: document.getElementById("acc-data-body"),
     dataHint: document.getElementById("acc-data-hint"),
     segments: document.getElementById("acc-segments"),
-    collectorsHint: document.getElementById("collectors-hint"),
-    collectorsBody: document.getElementById("collectors-body"),
   };
 
   const DATA_TAB_KEY = "ending_dev_monitor_data_tab";
@@ -1532,18 +1530,6 @@
     renderDataPanel(acc.sections, (acc.session || {}).collected || {});
   }
 
-  function roleClass(role) {
-    if (role === "sirian") return "is-sirian";
-    if (role === "overlayDev") return "is-dev";
-    return "";
-  }
-
-  function roleLabel(role) {
-    if (role === "sirian") return "시리안";
-    if (role === "overlayDev") return "오버레이 개발";
-    return "수집";
-  }
-
   function yn(v) {
     return v
       ? `<span class="ending-dev-pill is-on">ON</span>`
@@ -1866,72 +1852,11 @@
     if (els.tabMeDot) els.tabMeDot.hidden = !meOn;
   }
 
-  function signal(label, on, mode) {
-    // mode: truthy warn / "present" = 접속(노랑) / 생략 = 활성(초록)
-    let kind = "";
-    if (mode === "present") kind = on ? " is-present" : "";
-    else if (mode) kind = " is-warn";
-    else if (on) kind = " is-on";
-    return `<span class="ending-dev-signal${kind}"><span class="ending-dev-signal__dot" aria-hidden="true"></span>${esc(
-      label
-    )}</span>`;
-  }
-
-  function renderCollectors(data) {
-    const activeStation = activeStationId(data);
-    const rows = (Array.isArray(data.collectors) ? data.collectors : []).filter((c) => {
-      const sid = String(c.stationId || "").trim();
-      return Boolean(activeStation && sid && sid === activeStation);
-    });
-    if (els.collectorsHint) {
-      els.collectorsHint.textContent = activeStation
-        ? `${activeStation} · OBS / 수집기 탭 / 키`
-        : "선택한 계정 없음";
-    }
-    if (!els.collectorsBody) return;
-    if (!rows.length) {
-      els.collectorsBody.innerHTML = `<p class="ending-dev-empty">${
-        activeStation ? `${esc(activeStation)} 수집기 정보 없음` : "선택한 계정 없음"
-      }</p>`;
-      return;
-    }
-    els.collectorsBody.innerHTML = rows
-      .map((c) => {
-        const role = c.role || "collector";
-        const sid = String(c.stationId || "").trim();
-        const classes = ["ending-dev-collector", c.ingestActive ? "is-ingest" : "", "is-active-tab"]
-          .filter(Boolean)
-          .join(" ");
-        return `<article class="${classes}">
-          <div class="ending-dev-collector__top">
-            <div>
-              <p class="ending-dev-collector__id">${esc(sid || "—")}</p>
-              <p class="ending-dev-collector__meta">${
-                c.lastIngestAt
-                  ? `마지막 ${esc(fmtTime(c.lastIngestAt))}`
-                  : `키 ${esc(fmtTime(c.obsKeyUpdatedAt))}`
-              }</p>
-            </div>
-            <span class="ending-dev-role ${roleClass(role)}">${esc(roleLabel(role))}</span>
-          </div>
-          <div class="ending-dev-collector__signals">
-            ${signal("수집", c.ingestActive, c.ingestAuthFailRecent && !c.ingestActive)}
-            ${signal("OBS", c.obsBrowserActive, "present")}
-            ${signal("탭", c.collectorTabActive, "present")}
-            ${signal("키", c.hasObsKey)}
-            ${signal("바인드", c.boundLive)}
-          </div>
-        </article>`;
-      })
-      .join("");
-  }
-
   function paint(data, { animate = false } = {}) {
     lastData = data;
     setTabUi(activeTab);
     renderStrip(data);
     renderAccount(data);
-    renderCollectors(data);
     if (els.stamp) {
       els.stamp.textContent = data.generatedAt ? `갱신 ${fmtTime(data.generatedAt)}` : "—";
     }

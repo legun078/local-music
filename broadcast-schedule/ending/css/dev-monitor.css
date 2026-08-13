@@ -73,9 +73,6 @@
 
 /* Top bar */
 .ending-dev-bar {
-  position: sticky;
-  top: 0.5rem;
-  z-index: 20;
   display: grid;
   grid-template-columns: 1fr auto auto;
   gap: 0.85rem;
@@ -673,120 +670,6 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--dev-muted);
-}
-
-/* Collector — selected account only */
-.ending-dev-collector-block {
-  margin-top: 1.1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--dev-line);
-}
-
-.ending-dev-collector-block__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.65rem;
-}
-
-.ending-dev-collector-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.ending-dev-collector {
-  padding: 0.85rem 0.95rem;
-  border-radius: 14px;
-  border: 1px solid var(--dev-line);
-  background: linear-gradient(180deg, #fff, #f8fafd);
-}
-
-.ending-dev-collector.is-ingest {
-  border-left: 3px solid var(--dev-ok);
-}
-
-.ending-dev-collector__top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.55rem;
-}
-
-.ending-dev-collector__id {
-  margin: 0;
-  font-family: var(--dev-mono);
-  font-size: 0.92rem;
-  font-weight: 650;
-}
-
-.ending-dev-collector__meta {
-  margin: 0.18rem 0 0;
-  font-size: 0.72rem;
-  font-family: var(--dev-mono);
-  color: var(--dev-muted);
-}
-
-.ending-dev-collector__signals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-}
-
-.ending-dev-signal {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.22rem;
-  padding: 0.22rem 0.5rem;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--dev-muted);
-  background: var(--dev-panel-2);
-}
-
-.ending-dev-signal.is-on {
-  color: var(--dev-ok);
-  background: var(--dev-ok-soft);
-}
-
-.ending-dev-signal.is-warn {
-  color: var(--dev-warn);
-  background: var(--dev-warn-soft);
-}
-
-.ending-dev-signal.is-present {
-  color: #a16207;
-  background: #fff8db;
-}
-
-.ending-dev-signal__dot {
-  width: 0.35rem;
-  height: 0.35rem;
-  border-radius: 50%;
-  background: currentColor;
-}
-
-.ending-dev-role {
-  display: inline-block;
-  padding: 0.12rem 0.4rem;
-  border-radius: 6px;
-  font-size: 0.68rem;
-  font-weight: 750;
-  background: var(--dev-blue-soft);
-  color: var(--dev-blue);
-}
-
-.ending-dev-role.is-sirian {
-  background: #efe8ff;
-  color: #4a3a7a;
-}
-
-.ending-dev-role.is-dev {
-  background: #e4f0ff;
-  color: #2a5080;
 }
 
 /* Data */
