@@ -43,6 +43,7 @@ from credits_store import (
     normalize_soop_user_id,
     parse_iso,
     parse_signature_amounts,
+    serialize_mission_runs,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -994,12 +995,14 @@ def _dev_monitor_live_extras(session: dict | None) -> dict[str, Any]:
         return {
             "firstChat": None,
             "titleHistory": [],
+            "missionRuns": [],
             "metricsSeries": {"viewers": [], "up": [], "balloons": [], "chats": []},
             "replay": {},
         }
     return {
         "firstChat": _first_chat_collected_preview(session),
         "titleHistory": _title_history_preview(session),
+        "missionRuns": serialize_mission_runs(session),
         "metricsSeries": _metrics_series_readonly_preview(session),
         "replay": _dev_monitor_replay_context(session),
     }
@@ -1215,6 +1218,7 @@ def _session_collected_preview(session: dict | None, *, limit: int = 10) -> dict
             if isinstance(session.get("fanclubJoins"), list)
             else int(session.get("fanclubCount") or 0),
             "emoticons": len(emo_rows),
+            "missions": len(serialize_mission_runs(session)),
             "peakViewers": int(session.get("peakViewers") or 0),
             "lastViewerCount": int(session.get("lastViewerCount") or 0),
         },

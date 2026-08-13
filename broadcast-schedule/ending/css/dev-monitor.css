@@ -984,6 +984,90 @@
   font-weight: 650;
 }
 
+.ending-dev-missions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.ending-dev-missions li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  gap: 0.35rem 0.5rem;
+  align-items: baseline;
+  padding: 0.55rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid var(--dev-line);
+  background: var(--dev-panel-2);
+}
+
+.ending-dev-missions__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.12rem 0.42rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 750;
+  background: #e8edf5;
+  color: var(--dev-muted);
+}
+
+.ending-dev-missions__status.is-success {
+  background: var(--dev-ok-soft);
+  color: var(--dev-ok);
+}
+
+.ending-dev-missions__status.is-fail {
+  background: rgba(194, 59, 59, 0.12);
+  color: var(--dev-danger);
+}
+
+.ending-dev-missions__status.is-pending {
+  background: var(--dev-warn-soft);
+  color: var(--dev-warn);
+}
+
+.ending-dev-missions__status.is-draw {
+  background: #efe8ff;
+  color: #4a3a7a;
+}
+
+.ending-dev-missions__kind {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--dev-blue);
+}
+
+.ending-dev-missions__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.ending-dev-missions__total {
+  font-family: var(--dev-mono);
+  font-weight: 700;
+  font-size: 0.8rem;
+}
+
+.ending-dev-missions__at {
+  font-family: var(--dev-mono);
+  font-size: 0.72rem;
+  color: var(--dev-muted);
+}
+
+.ending-dev-missions__winner,
+.ending-dev-missions__donors {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.74rem;
+  color: var(--dev-muted);
+}
+
 .ending-dev-chart {
   display: flex;
   flex-direction: column;
@@ -1443,6 +1527,15 @@
 
   .ending-dev-digest__grid {
     grid-template-columns: 1fr;
+  }
+
+  .ending-dev-missions li {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .ending-dev-missions__total,
+  .ending-dev-missions__at {
+    grid-column: 1 / -1;
   }
 }
 

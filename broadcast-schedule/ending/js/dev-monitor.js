@@ -554,6 +554,66 @@
     </ol>`;
   }
 
+  function normalizeMissionRuns(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        if (!row || typeof row !== "object") return null;
+        const title = String(row.title || "").trim();
+        const status = String(row.status || "pending").trim() || "pending";
+        const kind = String(row.kind || "challenge").trim() || "challenge";
+        const donors = (Array.isArray(row.donors) ? row.donors : [])
+          .map((d) => {
+            if (!d || typeof d !== "object") return null;
+            const name = String(d.name || "").trim();
+            if (!name) return null;
+            return { name, value: String(d.value || "").trim() || `${fmtNum(d.total)}개` };
+          })
+          .filter(Boolean);
+        return {
+          title: title || `${row.kindLabel || "미션"}`,
+          status,
+          statusLabel: String(row.statusLabel || "").trim() || status,
+          kind,
+          kindLabel: String(row.kindLabel || "").trim() || kind,
+          total: Number(row.total) || 0,
+          startedAt: String(row.startedAt || "").trim(),
+          endedAt: String(row.endedAt || "").trim(),
+          winner: String(row.winner || "").trim(),
+          donors,
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function renderMissionRunsPanel(rows) {
+    const list = normalizeMissionRuns(rows);
+    if (!list.length) {
+      return `<p class="ending-dev-empty ending-dev-data-empty">아직 미션 후원이 없습니다. 도전·대결 미션이 열리면 내용과 성공·실패·보류가 여기에 쌓입니다.</p>`;
+    }
+    return `<ol class="ending-dev-missions">
+      ${list
+        .map((row) => {
+          const donors = row.donors.length
+            ? `<p class="ending-dev-missions__donors">${row.donors
+                .slice(0, 8)
+                .map((d) => `${esc(d.name)} ${esc(d.value)}`)
+                .join(" · ")}${row.donors.length > 8 ? ` 외 ${row.donors.length - 8}명` : ""}</p>`
+            : "";
+          const when = row.endedAt || row.startedAt;
+          return `<li>
+            <span class="ending-dev-missions__status is-${esc(row.status)}">${esc(row.statusLabel)}</span>
+            <span class="ending-dev-missions__kind">${esc(row.kindLabel)}</span>
+            <span class="ending-dev-missions__title" title="${esc(row.title)}">${esc(row.title)}</span>
+            <span class="ending-dev-missions__total">${row.total ? `${esc(fmtNum(row.total))}개` : "—"}</span>
+            ${when ? `<span class="ending-dev-missions__at">${esc(chartClockLabel(when))}</span>` : ""}
+            ${row.winner ? `<p class="ending-dev-missions__winner">승 ${esc(row.winner)}</p>` : ""}
+            ${donors}
+          </li>`;
+        })
+        .join("")}
+    </ol>`;
+  }
+
   function renderMetricsDigest(active, counts, replay, mode) {
     const chart = renderMetricsChartPanel(active?.metricsSeries, counts, replay, mode);
     const titles = normalizeTitleHistory(active?.titleHistory);
@@ -1359,6 +1419,18 @@
         counts: counts,
         items: [],
       });
+
+      const missionRuns = normalizeMissionRuns(extras.missionRuns);
+      const prevMission = byId.get("mission");
+      byId.set("mission", {
+        id: "mission",
+        title: dataTabTitle("mission"),
+        count: missionRuns.length || Number(prevMission?.count || 0),
+        pending: missionRuns.length === 0 && !Number(prevMission?.count || 0),
+        kind: "missionRuns",
+        missionRuns,
+        items: prevMission?.items || [],
+      });
     }
 
     const cats = [];
@@ -1481,12 +1553,14 @@
       const digest = renderMetricsDigest(active, counts, replay, metricsChartMode);
       panelBody = digest.html;
       chartBind = digest.bind;
+    } else if (active.kind === "missionRuns") {
+      panelBody = renderMissionRunsPanel(active.missionRuns);
     } else {
       const shown = sliceItemsForLimit(active.items, dataLimit);
       panelBody = renderDataList(shown);
     }
     const total = active.items?.length || active.count || 0;
-    const showLimit = active.kind !== "metricsChart";
+    const showLimit = active.kind !== "metricsChart" && active.kind !== "missionRuns";
     const panelHeadExtra =
       active.kind === "metricsChart"
         ? renderChartModeToggles(metricsChartMode)
