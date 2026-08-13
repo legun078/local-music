@@ -3447,7 +3447,7 @@ def empty_credits_payload() -> dict[str, Any]:
             {"id": "fanclub", "title": "팬클럽 가입", "pending": True, "items": []},
             {"id": "topfan", "title": "열혈팬 승급", "pending": True, "items": []},
             {"id": "quickview", "title": "퀵뷰 순위", "pending": True, "items": []},
-            {"id": "mission", "title": "미션", "pending": True, "items": []},
+            {"id": "mission", "title": "미션 순위", "pending": True, "items": []},
         ],
         "timeline": build_day_timeline({}),
         "footer": {
@@ -3767,14 +3767,24 @@ def build_demo_credits_payload() -> dict[str, Any]:
             },
             {
                 "id": "mission",
-                "title": "미션",
+                "title": "미션 순위",
                 "pending": False,
-                "items": [
-                    {"rank": 1, "name": "데모 도전 미션 A", "value": "성공 · 420개", "status": "success", "kind": "challenge"},
-                    {"rank": 2, "name": "데모 대결 미션", "value": "무승부 · 280개", "status": "draw", "kind": "battle"},
-                    {"rank": 3, "name": "데모 도전 미션 B", "value": "실패 · 90개", "status": "fail", "kind": "challenge"},
-                    {"rank": 4, "name": "진행 중 미션", "value": "보류 · 55개", "status": "pending", "kind": "challenge"},
-                ],
+                "items": ranked(
+                    [
+                        (nick("미션", 1), "420개"),
+                        (nick("미션", 2), "280개"),
+                        (nick("미션", 3), "190개"),
+                        (nick("미션", 4), "150개"),
+                        (nick("미션", 5), "120개"),
+                        (nick("미션", 6), "90개"),
+                        (nick("미션", 7), "70개"),
+                        (nick("미션", 8), "55개"),
+                        (nick("미션", 9), "40개"),
+                        (nick("미션", 10), "30개"),
+                        (nick("미션", 11), "20개"),
+                        (nick("미션", 12), "15개"),
+                    ]
+                ),
             },
         ],
         "timeline": timeline,
@@ -5059,49 +5069,31 @@ class CreditsStore:
         )
 
         mission_items = []
-        mission_runs = serialize_mission_runs(session)
-        if mission_runs:
-            for i, row in enumerate(mission_runs[:20], start=1):
-                bits = [row["statusLabel"]]
-                if int(row.get("total") or 0) > 0:
-                    bits.append(f"{int(row['total']):,}개")
-                if row.get("winner"):
-                    bits.append(str(row["winner"]))
-                mission_items.append(
-                    {
-                        "rank": i,
-                        "name": row["title"],
-                        "value": " · ".join(bits),
-                        "status": row["status"],
-                        "kind": row["kind"],
-                    }
-                )
-        else:
-            missions = session.get("missions") if isinstance(session.get("missions"), dict) else {}
-            for uid, row in missions.items():
-                if not isinstance(row, dict):
-                    continue
-                total = int(row.get("total") or 0)
-                if total <= 0:
-                    continue
-                mission_items.append(
-                    {
-                        "rank": 0,
-                        "name": str(row.get("name") or uid),
-                        "value": f"{total:,}개",
-                        "total": total,
-                    }
-                )
-            mission_items.sort(key=lambda x: (-x["total"], x["name"]))
-            for i, item in enumerate(mission_items[:10], start=1):
-                item["rank"] = i
-                item.pop("total", None)
+        missions = session.get("missions") if isinstance(session.get("missions"), dict) else {}
+        for uid, row in missions.items():
+            if not isinstance(row, dict):
+                continue
+            total = int(row.get("total") or 0)
+            if total <= 0:
+                continue
+            mission_items.append(
+                {
+                    "rank": 0,
+                    "name": str(row.get("name") or uid),
+                    "value": f"{total:,}개",
+                    "total": total,
+                }
+            )
+        mission_items.sort(key=lambda x: (-x["total"], x["name"]))
+        for i, item in enumerate(mission_items[:10], start=1):
+            item["rank"] = i
+            item.pop("total", None)
         sections.append(
             {
                 "id": "mission",
-                "title": "미션",
+                "title": "미션 순위",
                 "pending": pending and not mission_items,
-                "items": mission_items[:20],
+                "items": mission_items[:10],
             }
         )
 
