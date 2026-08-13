@@ -2213,7 +2213,7 @@ def build_top_emoticons(
 
 
 def demo_signature_top_emoticons(
-    station_id: str = "sirianrain", *, limit: int = 3
+    station_id: str = "sirianrain", *, limit: int = 6
 ) -> list[dict[str, Any]]:
     """데모·미리보기용 — 실제 BJ 시그니처 이미지·`/제목/`."""
     items = fetch_soop_signature_emoticons(station_id)
@@ -3325,7 +3325,7 @@ def build_demo_credits_payload() -> dict[str, Any]:
                 "items": ranked(
                     [(nick("이모티콘", i), f"{190 - i * 12}회") for i in range(1, 13)]
                 ),
-                "topEmoticons": demo_signature_top_emoticons("sirianrain", limit=3),
+                "topEmoticons": demo_signature_top_emoticons("sirianrain", limit=6),
             },
             {
                 "id": "subscribe",

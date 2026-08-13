@@ -661,6 +661,27 @@
                   imageUrl:
                     "https://static.file.sooplive.com/signature_emoticon/sirianrain/7135696d87e3e60dc.png",
                 },
+                {
+                  rank: 4,
+                  name: "/검거/",
+                  value: "48회",
+                  imageUrl:
+                    "https://static.file.sooplive.com/signature_emoticon/sirianrain/607766f91cac24b47.png",
+                },
+                {
+                  rank: 5,
+                  name: "/팝콘/",
+                  value: "36회",
+                  imageUrl:
+                    "https://static.file.sooplive.com/signature_emoticon/sirianrain/89606911fc057bf3d.png",
+                },
+                {
+                  rank: 6,
+                  name: "/화르륵/",
+                  value: "24회",
+                  imageUrl:
+                    "https://static.file.sooplive.com/signature_emoticon/sirianrain/4705696d89ce42c2b.png",
+                },
               ]
             : [];
         slides.push({
