@@ -2701,7 +2701,11 @@ def api_ingest():
             skipped_secondary = True
             events = []
     store = get_store()
-    session = store.ingest_events(events, station_id=station_id, source=source)
+    # SSAPI는 미션 제목·결과 보조. 수집기 연결 구간으로 치지 않음.
+    mark_sdk = source not in {"ssapi"}
+    session = store.ingest_events(
+        events, station_id=station_id, source=source, mark_sdk=mark_sdk
+    )
     stats = store.last_ingest_stats()
     sid = station_id or str((session or {}).get("stationId") or "").strip()
     if sid:

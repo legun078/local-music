@@ -12,6 +12,7 @@
     (becomesTopFan 단발은 힌트만 — 실제 변화는 연속 관측으로 확정)
   구독: SUBSCRIBED, SUBSCRIPTION_RENEWED, SUBSCRIPTION_GIFTED
   퀵뷰·미션·선물: QUICKVIEW_GIFTED, *_MISSION_GIFTED, OGQ_EMOTICON_GIFTED, GEM_GIFTED
+  미션 보조: SSAPI_MISSION (제목·key·결과만. 후원 수량은 SDK가 집계)
   메타: station 라이브 폴링(isLive/title/viewerCount)
 """
 
@@ -683,6 +684,8 @@ def ingest_event_fingerprint(
             "giftedUserId",
         )
     )
+    mission_key = _msg_field(msg, "key", "mission_key", "missionKey")
+    mission_phase = _msg_field(msg, "mission_phase", "missionPhase", "phase")
     # 입장/퇴장 목록은 정렬해 동일 배치가 같은 키가 되게
     user_list = msg.get("userList") if isinstance(msg.get("userList"), list) else None
     if user_list:
@@ -698,7 +701,21 @@ def ingest_event_fingerprint(
     else:
         list_key = ""
     return "|".join(
-        [act, user, text, count, emo, img, fan, sub, recv, list_key, str(bucket)]
+        [
+            act,
+            user,
+            text,
+            count,
+            emo,
+            img,
+            fan,
+            sub,
+            recv,
+            list_key,
+            mission_key,
+            mission_phase,
+            str(bucket),
+        ]
     )
 
 
@@ -958,8 +975,13 @@ MISSION_FANLIST_ACTIONS = frozenset(
         "CHALLENGE_MISSION_SPONSORS",
     }
 )
+SSAPI_MISSION_ACTION = "SSAPI_MISSION"
 MISSION_LIFECYCLE_ACTIONS = (
-    MISSION_GIFT_ACTIONS | MISSION_FINISH_ACTIONS | MISSION_SETTLE_ACTIONS | MISSION_FANLIST_ACTIONS
+    MISSION_GIFT_ACTIONS
+    | MISSION_FINISH_ACTIONS
+    | MISSION_SETTLE_ACTIONS
+    | MISSION_FANLIST_ACTIONS
+    | {SSAPI_MISSION_ACTION}
 )
 OGQ_GIFT_ACTIONS = frozenset({"OGQ_EMOTICON_GIFTED"})
 GEM_ACTIONS = frozenset({"GEM_GIFTED"})
@@ -1059,14 +1081,42 @@ def _empty_mission_run(kind: str, seq: int) -> dict[str, Any]:
         "winner": "",
         "isDraw": False,
         "donors": {},
+        "key": "",
     }
 
 
-def _open_mission_run(runs: list[dict[str, Any]], kind: str) -> dict[str, Any]:
+def _find_mission_run_by_key(runs: list[dict[str, Any]], key: str) -> dict[str, Any] | None:
+    needle = str(key or "").strip()
+    if not needle:
+        return None
     for row in reversed(runs):
-        if isinstance(row, dict) and row.get("kind") == kind and row.get("status") == "pending":
+        if isinstance(row, dict) and str(row.get("key") or "").strip() == needle:
             return row
+    return None
+
+
+def _open_mission_run(
+    runs: list[dict[str, Any]],
+    kind: str,
+    key: str = "",
+) -> dict[str, Any]:
+    found = _find_mission_run_by_key(runs, key)
+    if found:
+        return found
+    for row in reversed(runs):
+        if not isinstance(row, dict):
+            continue
+        if row.get("kind") != kind or row.get("status") != "pending":
+            continue
+        existing = str(row.get("key") or "").strip()
+        if existing and key and existing != key:
+            continue
+        if key:
+            row["key"] = key
+        return row
     row = _empty_mission_run(kind, len(runs) + 1)
+    if key:
+        row["key"] = key
     runs.append(row)
     return row
 
@@ -1106,13 +1156,16 @@ def note_mission_gift(
     count: int,
     ts: str,
     title: str = "",
+    key: str = "",
 ) -> dict[str, Any]:
     runs = ensure_mission_runs(session)
-    run = _open_mission_run(runs, mission_kind_from_action(action))
+    run = _open_mission_run(runs, mission_kind_from_action(action), key=key)
     if not run.get("startedAt"):
         run["startedAt"] = ts
     if title and not str(run.get("title") or "").strip():
         run["title"] = title
+    if key and not str(run.get("key") or "").strip():
+        run["key"] = key
     _add_mission_donor(run, user_id, name, count)
     return run
 
@@ -1126,7 +1179,8 @@ def note_mission_finished(
 ) -> dict[str, Any]:
     runs = ensure_mission_runs(session)
     kind = mission_kind_from_action(action)
-    run = _open_mission_run(runs, kind)
+    key = str((msg or {}).get("key") or (msg or {}).get("missionKey") or "").strip()
+    run = _open_mission_run(runs, kind, key=key)
     title = _mission_title_from_msg(msg)
     if title:
         run["title"] = title
@@ -1180,6 +1234,82 @@ def note_mission_fanlist(session: dict[str, Any], msg: dict[str, Any]) -> dict[s
             donors = run.get("donors") if isinstance(run.get("donors"), dict) else {}
             if uid not in donors:
                 _add_mission_donor(run, uid, uname, count)
+    return run
+
+
+def mission_kind_from_ssapi(payload: dict[str, Any] | None) -> str:
+    raw = payload if isinstance(payload, dict) else {}
+    mission_type = str(raw.get("mission_type") or raw.get("missionType") or "").strip().upper()
+    if "BATTLE" in mission_type or mission_type in {"GIFT", "SETTLE", "NOTICE"}:
+        return "battle"
+    return "challenge"
+
+
+def apply_ssapi_mission(
+    session: dict[str, Any],
+    payload: dict[str, Any] | None,
+    *,
+    ts: str = "",
+) -> dict[str, Any] | None:
+    """SSAPI mission 보조. 제목·key·결과만 반영하고 receive 후원 수량은 더하지 않는다."""
+    msg = payload if isinstance(payload, dict) else {}
+    if not msg:
+        return None
+    phase = str(msg.get("mission_phase") or msg.get("phase") or "").strip().lower()
+    key = str(msg.get("key") or msg.get("mission_key") or msg.get("missionKey") or "").strip()
+    title = str(msg.get("title") or "").strip()[:80]
+    kind = mission_kind_from_ssapi(msg)
+    at = ts or utc_now_iso()
+    runs = ensure_mission_runs(session)
+    run = _open_mission_run(runs, kind, key=key)
+    if key:
+        run["key"] = key
+    if title and (phase == "result" or not str(run.get("title") or "").strip()):
+        run["title"] = title
+    if not run.get("startedAt"):
+        run["startedAt"] = at
+
+    if phase == "result":
+        result = msg.get("result") if isinstance(msg.get("result"), dict) else {}
+        status = _normalize_mission_status(
+            result.get("mission_status") or msg.get("mission_status") or msg.get("missionStatus"),
+            is_draw=result.get("draw"),
+        )
+        if status:
+            run["status"] = status
+        run["endedAt"] = at
+        if result.get("draw") is True:
+            run["isDraw"] = True
+        winner = str(result.get("winner") or "").strip()
+        if winner:
+            run["winner"] = winner[:40]
+        return run
+
+    if phase == "settle":
+        run["settledAt"] = at
+        settle = msg.get("settle") if isinstance(msg.get("settle"), dict) else {}
+        donors = settle.get("donors") if isinstance(settle.get("donors"), list) else []
+        existing = run.get("donors") if isinstance(run.get("donors"), dict) else {}
+        filled = 0
+        for row in donors:
+            if not isinstance(row, dict):
+                continue
+            uid = str(row.get("user_id") or row.get("userId") or "").strip()
+            if not uid or uid in existing:
+                continue
+            name = str(row.get("nickname") or row.get("name") or uid).strip()
+            try:
+                count = int(row.get("cnt") or row.get("count") or 0)
+            except (TypeError, ValueError):
+                count = 0
+            if count <= 0:
+                continue
+            _add_mission_donor(run, uid, name, count)
+            filled += 1
+        if filled:
+            run["settledCount"] = int(run.get("settledCount") or 0) + filled
+        return run
+
     return run
 
 
@@ -6082,6 +6212,7 @@ class CreditsStore:
                         count=count,
                         ts=ts,
                         title=_mission_title_from_msg(msg),
+                        key=str(msg.get("key") or msg.get("missionKey") or "").strip(),
                     )
                     mark_present(user_id, name, ts_ms)
                     try:
@@ -6109,6 +6240,9 @@ class CreditsStore:
                         uname = str(row.get("userNickname") or uid).strip()
                         if uid:
                             mark_present(uid, uname, ts_ms)
+
+                elif action == SSAPI_MISSION_ACTION:
+                    apply_ssapi_mission(session, msg, ts=ts)
 
                 elif action in OGQ_GIFT_ACTIONS:
                     if not user_id:
