@@ -371,12 +371,28 @@
   }
 
   function metricsTabCountLabel(viewerN, chatN) {
-    const v = Number(viewerN) || 0;
-    const c = Number(chatN) || 0;
-    if (v > 0 && c > 0) return `${v}·${c}`;
-    if (v > 0) return String(v);
-    if (c > 0) return String(c);
-    return "대기";
+    const n = Math.max(Number(viewerN) || 0, Number(chatN) || 0);
+    return n > 0 ? `${n}분` : "대기";
+  }
+
+  const DATA_TAB_TITLES = {
+    metricsChart: "종합",
+    chat: "채팅",
+    watch: "시청시간",
+    donation: "후원",
+    signature: "시그풍",
+    fanclub: "팬클럽",
+    subscribe_gift: "구독선물",
+    subscribe: "신규구독",
+    subscribe_renew: "연속구독",
+    emoticon: "이모티콘",
+    mission: "미션",
+    topfan: "열혈",
+    quickview: "퀵뷰",
+  };
+
+  function dataTabTitle(id, fallback) {
+    return DATA_TAB_TITLES[id] || String(fallback || id || "").trim() || id;
   }
 
   const CHART_W = 680;
@@ -1276,7 +1292,7 @@
       const items = normalizeItems(sec.items || []);
       byId.set(id, {
         id,
-        title: String(sec.title || id),
+        title: dataTabTitle(id, sec.title),
         count: Number(sec.itemCount || items.length || 0),
         pending: Boolean(sec.pending) && items.length === 0,
         items,
@@ -1285,15 +1301,15 @@
 
     // 모니터는 collected 전체 목록을 우선 (크레딧 섹션은 상위 일부만)
     const preferred = [
-      ["chat", "채팅 순위", c.topChatters, "count", counts.chatters],
-      ["watch", "시청 시간 순위", c.topWatchers, "value", counts.watchers],
-      ["donation", "후원 순위", c.topDonations, "total", counts.donors],
-      ["fanclub", "팬클럽 가입", c.fanclubJoins, "value", counts.fanclubJoins],
-      ["subscribe_gift", "구독 선물", c.subscriptionGifts, "value", counts.subscriptionGifts],
-      ["subscribe", "신규 구독", c.subscribers, "value", counts.subscribers],
-      ["subscribe_renew", "연속 구독", c.subscriberRenewals, "value", counts.subscriberRenewals],
-      ["emoticon", "이모티콘 순위", c.topEmoticons, "count", counts.emoticons],
-      ["topfan", "열혈팬 승급", c.topFans, "value", null],
+      ["chat", dataTabTitle("chat"), c.topChatters, "count", counts.chatters],
+      ["watch", dataTabTitle("watch"), c.topWatchers, "value", counts.watchers],
+      ["donation", dataTabTitle("donation"), c.topDonations, "total", counts.donors],
+      ["fanclub", dataTabTitle("fanclub"), c.fanclubJoins, "value", counts.fanclubJoins],
+      ["subscribe_gift", dataTabTitle("subscribe_gift"), c.subscriptionGifts, "value", counts.subscriptionGifts],
+      ["subscribe", dataTabTitle("subscribe"), c.subscribers, "value", counts.subscribers],
+      ["subscribe_renew", dataTabTitle("subscribe_renew"), c.subscriberRenewals, "value", counts.subscriberRenewals],
+      ["emoticon", dataTabTitle("emoticon"), c.topEmoticons, "count", counts.emoticons],
+      ["topfan", dataTabTitle("topfan"), c.topFans, "value", null],
     ];
     for (const [id, title, rows, key, totalHint] of preferred) {
       const items = normalizeItems(rows, key);
@@ -1309,7 +1325,7 @@
       if (!useCollected) continue;
       byId.set(id, {
         id,
-        title: prev?.title || title,
+        title: dataTabTitle(id, prev?.title || title),
         count: Number(totalHint) > 0 ? Number(totalHint) : items.length,
         pending: false,
         items,
@@ -1329,7 +1345,8 @@
       const extraN = (firstReady ? 1 : 0) + titleHistory.length;
       byId.set("metricsChart", {
         id: "metricsChart",
-        title: "시청 · 화력",
+        title: dataTabTitle("metricsChart"),
+        panelTitle: "시청 · 화력",
         count: Math.max(viewerN, chatN, extraN),
         countLabel: metricsTabCountLabel(viewerN, chatN),
         pending: viewerN === 0 && chatN === 0 && !firstReady && titleHistory.length === 0,
@@ -1477,7 +1494,7 @@
     els.dataBody.innerHTML = `
       <div class="ending-dev-data-panel">
         <div class="ending-dev-data-panel__head">
-          <h4 class="ending-dev-data-panel__title">${esc(active.title)}</h4>
+          <h4 class="ending-dev-data-panel__title">${esc(active.panelTitle || active.title)}</h4>
           ${showLimit ? renderLimitToggles(total) : panelHeadExtra}
         </div>
         ${panelBody}
