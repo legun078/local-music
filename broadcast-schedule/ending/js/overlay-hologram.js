@@ -194,7 +194,7 @@
     const don =
       slide.donationLabel ||
       (slide.donationCount != null && Number(slide.donationCount) > 0
-        ? `${fmt(slide.donationCount)}건`
+        ? `${fmt(slide.donationCount)}명`
         : "");
     const sub =
       slide.subscribeLabel ||
