@@ -39,6 +39,11 @@ INGEST_DEDUP_TTL_MS = 8_000
 INGEST_DEDUP_BUCKET_MS = 2_000
 _INGEST_DEDUP: dict[str, dict[str, float]] = {}  # station -> {fingerprint: seen_ts_ms}
 
+# 방종 직후 크레딧 재생 중 늦게 도착한 후원·채팅을 버릴지 여부
+ENDED_INGEST_GRACE_SEC = 15 * 60
+# 한 번에 채울 팬클럽 번호 갭 상한 (오탐 거대 번호 방어)
+FANCLUB_GAP_FILL_MAX = 30
+
 # 열혈(isTopFan) 스티키 상태: 단발 노이즈를 버리고 연속 관측으로만 전환
 TOPFAN_PROMOTE_CONFIRM = 2  # known False → True (또는 승급 힌트 확정)
 TOPFAN_DEMOTE_CONFIRM = 3  # known True → False
@@ -1376,6 +1381,17 @@ def parse_iso(value: str | None) -> datetime | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def ended_ingest_in_grace(session: dict[str, Any] | None) -> bool:
+    """방종 직후 N분 동안은 ingest를 이어 받아 크레딧 이후 후원을 놓치지 않는다."""
+    if not isinstance(session, dict):
+        return False
+    ended = parse_iso(str(session.get("endedAt") or ""))
+    if not ended:
+        return False
+    age = (datetime.now(timezone.utc) - ended).total_seconds()
+    return 0 <= age <= ENDED_INGEST_GRACE_SEC
 
 
 def format_duration(started_at: str | None, ended_at: str | None = None) -> str:
@@ -4407,6 +4423,7 @@ class CreditsStore:
                 "id": "chat",
                 "title": "채팅 순위",
                 "pending": pending and not chat_items,
+                "total": len(chat_items),
                 "items": [
                     {"rank": i["rank"], "name": i["name"], "value": i["value"]}
                     for i in chat_items[:10]
@@ -4416,6 +4433,7 @@ class CreditsStore:
                 "id": "watch",
                 "title": "시청 시간 순위",
                 "pending": pending and not watch_items,
+                "total": len(watch_items),
                 "items": [
                     {"rank": i["rank"], "name": i["name"], "value": i["value"]}
                     for i in watch_items[:10]
@@ -4425,6 +4443,7 @@ class CreditsStore:
                 "id": "donation",
                 "title": "후원 순위",
                 "pending": pending and not donation_items,
+                "total": len(donation_items),
                 "items": [
                     {"rank": i["rank"], "name": i["name"], "value": i["value"]}
                     for i in donation_items[:10]
@@ -4520,12 +4539,16 @@ class CreditsStore:
                     break
             return out
 
-        subscribe_items = _name_items(session.get("subscribers"))
+        subscribe_raw = (
+            session.get("subscribers") if isinstance(session.get("subscribers"), list) else []
+        )
+        subscribe_items = _name_items(subscribe_raw)
         sections.append(
             {
                 "id": "subscribe",
                 "title": "신규 구독",
                 "pending": pending and not subscribe_items,
+                "total": len(subscribe_raw),
                 "items": subscribe_items,
             }
         )
@@ -4562,6 +4585,7 @@ class CreditsStore:
                 "id": "subscribe_renew",
                 "title": "연속 구독",
                 "pending": pending and not renew_items,
+                "total": len(renew_raw),
                 "items": renew_items,
             }
         )
@@ -4589,27 +4613,34 @@ class CreditsStore:
                 "id": "subscribe_gift",
                 "title": "구독 선물",
                 "pending": pending and not gift_items,
+                "total": len(gift_raw),
                 "items": gift_items,
             }
         )
 
-        fanclub_items = _name_items(session.get("fanclubJoins"))
-        fanclub_count = int(session.get("fanclubCount") or len(fanclub_items) or 0)
+        fanclub_raw = (
+            session.get("fanclubJoins") if isinstance(session.get("fanclubJoins"), list) else []
+        )
+        fanclub_items = _name_items(fanclub_raw)
+        fanclub_count = int(session.get("fanclubCount") or len(fanclub_raw) or 0)
         sections.append(
             {
                 "id": "fanclub",
                 "title": "팬클럽 가입",
                 "pending": pending and not fanclub_items and fanclub_count <= 0,
+                "total": fanclub_count,
                 "items": fanclub_items,
             }
         )
 
-        topfan_items = _name_items(session.get("topFans"))
+        topfan_raw = session.get("topFans") if isinstance(session.get("topFans"), list) else []
+        topfan_items = _name_items(topfan_raw)
         sections.append(
             {
                 "id": "topfan",
                 "title": "열혈팬 승급",
                 "pending": pending and not topfan_items,
+                "total": len(topfan_raw),
                 "items": topfan_items,
             }
         )
@@ -4720,10 +4751,10 @@ class CreditsStore:
                 "chatCount": chat_count,
                 "firstChat": first_out,
                 "fanclubCount": fanclub_count,
-                "subscribeCount": len(subscribe_items),
-                "subscribeRenewCount": len(renew_items),
-                "subscribeGiftCount": len(gift_items),
-                "topFanCount": len(topfan_items),
+                "subscribeCount": len(subscribe_raw),
+                "subscribeRenewCount": len(renew_raw),
+                "subscribeGiftCount": len(gift_raw),
+                "topFanCount": len(topfan_raw),
                 "flagCounts": flag_counts,
                 "lastUpCount": session.get("lastUpCount"),
                 "upGain": int(session.get("upGain") or 0),
@@ -4985,7 +5016,8 @@ class CreditsStore:
             if session_needs_new_broadcast(session):
                 ended_clean = bool(session.get("endedAt")) and not session.get("active")
                 prev_broad = str(session.get("broadNo") or "").strip()
-                if ended_clean:
+                in_end_grace = ended_clean and ended_ingest_in_grace(session)
+                if ended_clean and not in_end_grace:
                     for raw in events:
                         if not isinstance(raw, dict):
                             continue
@@ -5015,7 +5047,12 @@ class CreditsStore:
                         "ignored": "session_ended",
                     }
                     return session
-                if session_must_preserve(session, broad_no=prev_broad):
+                if in_end_grace:
+                    _credits_log(
+                        "ingest end-grace keep session "
+                        f"ended={session.get('endedAt')} received={len(events)}"
+                    )
+                elif session_must_preserve(session, broad_no=prev_broad):
                     # stale active 등 — 데이터 있는 세션은 ingest로 덮지 않음
                     resume_collector_session(session)
                     _credits_log(
@@ -5186,11 +5223,46 @@ class CreditsStore:
             def note_fanclub(uid: str, uname: str, fan_number: int, ts: str) -> None:
                 if not uid or fan_number <= 0:
                     return
+                excluded = session.get("fanclubExcludedUserIds")
+                if isinstance(excluded, list) and uid in excluded:
+                    return
                 if any(isinstance(r, dict) and r.get("userId") == uid for r in fanclub_joins):
+                    return
+                taken: set[int] = set()
+                for row in fanclub_joins:
+                    if not isinstance(row, dict):
+                        continue
+                    try:
+                        existing_n = int(row.get("fanNumber") or 0)
+                    except (TypeError, ValueError):
+                        existing_n = 0
+                    if existing_n > 0:
+                        taken.add(existing_n)
+                if fan_number in taken:
                     return
                 fanclub_joins.append(
                     {"userId": uid, "name": uname, "fanNumber": fan_number, "at": ts}
                 )
+                taken.add(fan_number)
+                nums = sorted(taken)
+                if len(nums) >= 2:
+                    missing = [n for n in range(nums[0], nums[-1] + 1) if n not in taken]
+                    if 0 < len(missing) <= FANCLUB_GAP_FILL_MAX:
+                        for n in missing:
+                            fanclub_joins.append(
+                                {
+                                    "userId": f"__missed__{n}",
+                                    "name": f"(수집 실패) #{n}",
+                                    "fanNumber": n,
+                                    "at": ts,
+                                    "synthetic": True,
+                                    "missed": True,
+                                }
+                            )
+                fanclub_joins.sort(
+                    key=lambda r: int(r.get("fanNumber") or 0) if isinstance(r, dict) else 0
+                )
+                session["fanclubJoins"] = fanclub_joins
                 session["fanclubCount"] = len(fanclub_joins)
 
             def note_topfan(uid: str, uname: str, ts: str) -> None:
@@ -5461,7 +5533,7 @@ class CreditsStore:
                         sig_users[user_id] = sig_urow
                         sig_hit["users"] = sig_users
                         sigs[key] = sig_hit
-                    touch_chatter(user_id, name, ts_ms)
+                    mark_present(user_id, name, ts_ms)
                     try:
                         fan_number = int(msg.get("fanNumber") or 0)
                     except (TypeError, ValueError):
@@ -5607,7 +5679,7 @@ class CreditsStore:
                     row["total"] = int(row.get("total") or 0) + count
                     row["count"] = int(row.get("count") or 0) + 1
                     missions[user_id] = row
-                    touch_chatter(user_id, name, ts_ms)
+                    mark_present(user_id, name, ts_ms)
                     try:
                         fan_number = int(msg.get("fanNumber") or 0)
                     except (TypeError, ValueError):

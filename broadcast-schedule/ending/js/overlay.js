@@ -684,7 +684,8 @@
       return false;
     }
 
-    const total = items.length;
+    const listed = items.length;
+    const total = Math.max(Number(section?.total) || 0, listed);
     const top = items.slice(0, RANK_LIMIT);
     const byRank = [...top].sort((a, b) => a.rank - b.rank);
     const champ = byRank.find((i) => i.rank === 1) || byRank[0] || null;
