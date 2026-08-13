@@ -13,6 +13,7 @@
   구독: SUBSCRIBED, SUBSCRIPTION_RENEWED, SUBSCRIPTION_GIFTED
   퀵뷰·미션·선물: QUICKVIEW_GIFTED, *_MISSION_GIFTED, OGQ_EMOTICON_GIFTED, GEM_GIFTED
   미션 보조: SSAPI_MISSION (제목·key·결과만. 후원 수량은 SDK가 집계)
+  후원 텍스트 보조: SSAPI_DONATION (별풍 메시지. 수량 집계는 SDK)
   메타: station 라이브 폴링(isLive/title/viewerCount)
 """
 
@@ -976,6 +977,7 @@ MISSION_FANLIST_ACTIONS = frozenset(
     }
 )
 SSAPI_MISSION_ACTION = "SSAPI_MISSION"
+SSAPI_DONATION_ACTION = "SSAPI_DONATION"
 MISSION_LIFECYCLE_ACTIONS = (
     MISSION_GIFT_ACTIONS
     | MISSION_FINISH_ACTIONS
@@ -996,9 +998,11 @@ INGEST_TRACKED_ACTIONS = (
     | SUBSCRIBE_GIFT
     | QUICKVIEW_ACTIONS
     | MISSION_LIFECYCLE_ACTIONS
+    | {SSAPI_DONATION_ACTION}
     | OGQ_GIFT_ACTIONS
     | GEM_ACTIONS
 )
+DONATION_NOTES_MAX = 800
 
 MISSION_STATUS_LABELS = {
     "pending": "보류",
@@ -1311,6 +1315,123 @@ def apply_ssapi_mission(
         return run
 
     return run
+
+
+def _donation_text_from_msg(msg: dict[str, Any] | None) -> str:
+    if not isinstance(msg, dict):
+        return ""
+    for key in ("message", "comment", "text", "donationMessage", "msg"):
+        text = str(msg.get(key) or "").strip()
+        if text:
+            return text[:200]
+    return ""
+
+
+def ensure_donation_notes(session: dict[str, Any] | None) -> list[dict[str, Any]]:
+    session = session if isinstance(session, dict) else {}
+    notes = session.get("donationNotes")
+    if not isinstance(notes, list):
+        notes = []
+        session["donationNotes"] = notes
+    return notes
+
+
+def note_donation_text(
+    session: dict[str, Any],
+    *,
+    user_id: str,
+    name: str,
+    count: int,
+    text: str,
+    ts: str,
+    note_id: str = "",
+    action: str = "",
+) -> dict[str, Any] | None:
+    """후원 메시지(노래 요청·방셀 등). 빈 텍스트는 저장하지 않는다."""
+    body = str(text or "").strip()[:200]
+    if not body:
+        return None
+    uid = str(user_id or "").strip()
+    notes = ensure_donation_notes(session)
+    nid = str(note_id or "").strip()
+    if nid and any(isinstance(row, dict) and str(row.get("id") or "") == nid for row in notes):
+        return None
+    if not nid:
+        for row in reversed(notes[-20:]):
+            if not isinstance(row, dict):
+                continue
+            if (
+                str(row.get("userId") or "") == uid
+                and str(row.get("text") or "") == body
+                and int(row.get("count") or 0) == int(count or 0)
+            ):
+                return None
+    row = {
+        "id": nid or f"d{len(notes) + 1}",
+        "userId": uid,
+        "name": str(name or uid).strip() or uid,
+        "count": int(count or 0),
+        "text": body,
+        "at": ts or utc_now_iso(),
+        "action": str(action or "").strip(),
+    }
+    notes.append(row)
+    if len(notes) > DONATION_NOTES_MAX:
+        del notes[: len(notes) - DONATION_NOTES_MAX]
+    return row
+
+
+def apply_ssapi_donation(
+    session: dict[str, Any],
+    payload: dict[str, Any] | None,
+    *,
+    ts: str = "",
+) -> dict[str, Any] | None:
+    """SSAPI 별풍 메시지 보조. 후원 수량은 더하지 않는다."""
+    msg = payload if isinstance(payload, dict) else {}
+    text = _donation_text_from_msg(msg)
+    if not text:
+        return None
+    try:
+        count = int(msg.get("cnt") or msg.get("count") or 0)
+    except (TypeError, ValueError):
+        count = 0
+    return note_donation_text(
+        session,
+        user_id=str(msg.get("user_id") or msg.get("userId") or "").strip(),
+        name=str(msg.get("nickname") or msg.get("userNickname") or "").strip(),
+        count=count,
+        text=text,
+        ts=ts,
+        note_id=str(msg.get("_id") or msg.get("id") or "").strip(),
+        action="SSAPI_DONATION",
+    )
+
+
+def serialize_donation_notes(session: dict[str, Any] | None) -> list[dict[str, Any]]:
+    notes = session.get("donationNotes") if isinstance(session, dict) else None
+    if not isinstance(notes, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for row in notes:
+        if not isinstance(row, dict):
+            continue
+        text = str(row.get("text") or "").strip()
+        if not text:
+            continue
+        count = int(row.get("count") or 0)
+        out.append(
+            {
+                "id": str(row.get("id") or ""),
+                "userId": str(row.get("userId") or ""),
+                "name": str(row.get("name") or row.get("userId") or ""),
+                "count": count,
+                "value": f"{count:,}개" if count > 0 else "",
+                "text": text,
+                "at": str(row.get("at") or ""),
+            }
+        )
+    return out
 
 
 def serialize_mission_runs(session: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -2263,6 +2384,19 @@ def merge_prior_session_into(session: dict[str, Any], prior: dict[str, Any] | No
     if merged_runs:
         session["missionRuns"] = merged_runs
 
+    merged_notes: list[dict[str, Any]] = []
+    seen_notes: set[str] = set()
+    for row in list(prior.get("donationNotes") or []) + list(session.get("donationNotes") or []):
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("id") or "").strip() or f"{row.get('userId')}|{row.get('at')}|{row.get('text')}"
+        if key in seen_notes:
+            continue
+        seen_notes.add(key)
+        merged_notes.append(row)
+    if merged_notes:
+        session["donationNotes"] = merged_notes[-DONATION_NOTES_MAX:]
+
     # 채팅·후원 등 user-keyed
     for key, count_keys in (
         ("chatters", ("count",)),
@@ -3202,6 +3336,7 @@ def empty_session(station_id: str = "") -> dict[str, Any]:
         "quickviews": {},
         "missions": {},
         "missionRuns": [],
+        "donationNotes": [],
         "gems": {},
         "chatSdkConnected": False,
         "pendingChatSdk": True,
@@ -3981,6 +4116,7 @@ class CreditsStore:
             "titleHistory",
             "collectorSegments",
             "missionRuns",
+            "donationNotes",
         ):
             if not isinstance(data.get(key), list):
                 data[key] = []
@@ -3993,6 +4129,9 @@ class CreditsStore:
         data.setdefault("missionRuns", [])
         if not isinstance(data.get("missionRuns"), list):
             data["missionRuns"] = []
+        data.setdefault("donationNotes", [])
+        if not isinstance(data.get("donationNotes"), list):
+            data["donationNotes"] = []
         data.setdefault("gems", {})
         data.setdefault("balloonTotal", 0)
         data.setdefault("upGain", 0)
@@ -5645,6 +5784,7 @@ class CreditsStore:
             quickviews = session.setdefault("quickviews", {})
             missions = session.setdefault("missions", {})
             mission_runs = ensure_mission_runs(session)
+            ensure_donation_notes(session)
             gems = session.setdefault("gems", {})
 
             dedup_station = self._norm_station_id(
@@ -6010,6 +6150,15 @@ class CreditsStore:
                     row["count"] = int(row.get("count") or 0) + 1
                     row["maxSingle"] = max(int(row.get("maxSingle") or 0), count)
                     donations[user_id] = row
+                    note_donation_text(
+                        session,
+                        user_id=user_id,
+                        name=name,
+                        count=count,
+                        text=_donation_text_from_msg(msg),
+                        ts=ts,
+                        action=action,
+                    )
                     if action in BALLOON_SERIES_ACTIONS:
                         record_balloon_metric(session, count, at=ts)
                     # 개수별 횟수 — 시그니처 필터는 오버레이 등록 목록으로 나중에 적용
@@ -6243,6 +6392,9 @@ class CreditsStore:
 
                 elif action == SSAPI_MISSION_ACTION:
                     apply_ssapi_mission(session, msg, ts=ts)
+
+                elif action == SSAPI_DONATION_ACTION:
+                    apply_ssapi_donation(session, msg, ts=ts)
 
                 elif action in OGQ_GIFT_ACTIONS:
                     if not user_id:

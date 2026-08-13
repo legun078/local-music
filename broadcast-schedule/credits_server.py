@@ -43,6 +43,7 @@ from credits_store import (
     normalize_soop_user_id,
     parse_iso,
     parse_signature_amounts,
+    serialize_donation_notes,
     serialize_mission_runs,
 )
 
@@ -996,6 +997,7 @@ def _dev_monitor_live_extras(session: dict | None) -> dict[str, Any]:
             "firstChat": None,
             "titleHistory": [],
             "missionRuns": [],
+            "donationNotes": [],
             "metricsSeries": {"viewers": [], "up": [], "balloons": [], "chats": []},
             "replay": {},
         }
@@ -1003,6 +1005,7 @@ def _dev_monitor_live_extras(session: dict | None) -> dict[str, Any]:
         "firstChat": _first_chat_collected_preview(session),
         "titleHistory": _title_history_preview(session),
         "missionRuns": serialize_mission_runs(session),
+        "donationNotes": serialize_donation_notes(session),
         "metricsSeries": _metrics_series_readonly_preview(session),
         "replay": _dev_monitor_replay_context(session),
     }

@@ -585,6 +585,42 @@
       .filter(Boolean);
   }
 
+  function normalizeDonationNotes(rows) {
+    return (Array.isArray(rows) ? rows : [])
+      .map((row) => {
+        if (!row || typeof row !== "object") return null;
+        const text = String(row.text || "").trim();
+        if (!text) return null;
+        return {
+          name: String(row.name || "").trim() || "익명",
+          text,
+          value: String(row.value || "").trim(),
+          count: Number(row.count) || 0,
+          at: String(row.at || "").trim(),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function renderDonationNotes(rows) {
+    const list = normalizeDonationNotes(rows);
+    if (!list.length) return "";
+    return `<ol class="ending-dev-notes">
+      ${list
+        .map((row) => {
+          const when = row.at ? `<span class="ending-dev-notes__at">${esc(chartClockLabel(row.at))}</span>` : "";
+          const amt = row.value ? `<span class="ending-dev-notes__amt">${esc(row.value)}</span>` : "";
+          return `<li>
+            <span class="ending-dev-notes__name">${esc(row.name)}</span>
+            ${amt}
+            ${when}
+            <p class="ending-dev-notes__text">${esc(row.text)}</p>
+          </li>`;
+        })
+        .join("")}
+    </ol>`;
+  }
+
   function renderMissionRunsPanel(rows) {
     const list = normalizeMissionRuns(rows);
     if (!list.length) {
@@ -1431,6 +1467,20 @@
         missionRuns,
         items: prevMission?.items || [],
       });
+
+      const donationNotes = normalizeDonationNotes(extras.donationNotes);
+      const prevDon = byId.get("donation");
+      if (prevDon || donationNotes.length) {
+        byId.set("donation", {
+          id: "donation",
+          title: dataTabTitle("donation", prevDon?.title),
+          count: Math.max(Number(prevDon?.count || 0), donationNotes.length),
+          pending: !Number(prevDon?.count || 0) && donationNotes.length === 0,
+          kind: "donationNotes",
+          donationNotes,
+          items: prevDon?.items || [],
+        });
+      }
     }
 
     const cats = [];
@@ -1555,6 +1605,10 @@
       chartBind = digest.bind;
     } else if (active.kind === "missionRuns") {
       panelBody = renderMissionRunsPanel(active.missionRuns);
+    } else if (active.kind === "donationNotes") {
+      const shown = sliceItemsForLimit(active.items, dataLimit);
+      const notes = renderDonationNotes(active.donationNotes);
+      panelBody = `${renderDataList(shown)}${notes}`;
     } else {
       const shown = sliceItemsForLimit(active.items, dataLimit);
       panelBody = renderDataList(shown);

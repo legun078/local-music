@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """SSAPI 미션 보조 수집기.
 
-공식 Chat SDK가 채팅·후원·병풍을 집계하고, 이 프로세스는 미션 제목·key·결과만
-localhost ingest 로 보강한다. receive 후원 수량은 더하지 않는다.
+공식 Chat SDK가 채팅·후원·병풍을 집계하고, 이 프로세스는 미션 제목·key·결과와
+별풍 메시지만 localhost ingest 로 보강한다. 후원 수량은 더하지 않는다.
 
 필요: .env 의 SSAPI_API_KEY (https://ssapi.kr 대시보드)
 """
@@ -183,14 +183,14 @@ def _wanted_streamer(payload: dict[str, Any]) -> bool:
     return True
 
 
-def ingest_mission(payload: dict[str, Any]) -> bool:
+def ingest_event(action: str, payload: dict[str, Any]) -> bool:
     body = json.dumps(
         {
             "stationId": STATION_ID,
             "source": "ssapi",
             "events": [
                 {
-                    "action": "SSAPI_MISSION",
+                    "action": action,
                     "at": _utc_now(),
                     "message": payload,
                 }
@@ -206,20 +206,19 @@ def ingest_mission(payload: dict[str, Any]) -> bool:
         with urllib.request.urlopen(req, timeout=10) as resp:
             raw = json.loads(resp.read().decode("utf-8", "replace"))
     except Exception as exc:
-        _log(f"ingest FAIL {exc}")
-        write_status(connected=True, lastError=str(exc)[:200], lastPhase=payload.get("mission_phase"))
+        _log(f"ingest FAIL {action} {exc}")
+        write_status(connected=True, lastError=str(exc)[:200], lastAction=action)
         return False
     accepted = int((raw or {}).get("accepted") or 0)
-    _log(
-        f"ingest phase={payload.get('mission_phase')} key={payload.get('key')} "
-        f"title={str(payload.get('title') or '')[:40]!r} accepted={accepted}"
-    )
+    label = str(payload.get("title") or payload.get("message") or "")[:40]
+    _log(f"ingest {action} {label!r} accepted={accepted}")
     write_status(
         connected=True,
         lastError="",
+        lastAction=action,
         lastPhase=payload.get("mission_phase"),
         lastKey=payload.get("key"),
-        lastTitle=str(payload.get("title") or "")[:80],
+        lastTitle=label,
         lastIngestAt=_utc_now(),
         accepted=accepted,
     )
@@ -235,7 +234,7 @@ def run_socket(api_key: str) -> None:
     def connect() -> None:
         _log("socket connected")
         sio.emit("login", api_key)
-        sio.emit("setReceiver", "mission")
+        sio.emit("setReceiver", "mission,donation")
         write_status(connected=True, lastError="")
 
     @sio.on("login")
@@ -254,7 +253,19 @@ def run_socket(api_key: str) -> None:
             return
         if not _wanted_streamer(payload):
             return
-        ingest_mission(payload)
+        ingest_event("SSAPI_MISSION", payload)
+
+    @sio.event
+    def donation(compressed: Any) -> None:
+        payload = decode_ssapi_payload(compressed)
+        if not payload:
+            _log("donation decode FAIL")
+            return
+        if not _wanted_streamer(payload):
+            return
+        if not str(payload.get("message") or payload.get("comment") or payload.get("text") or "").strip():
+            return
+        ingest_event("SSAPI_DONATION", payload)
 
     @sio.event
     def disconnect() -> None:

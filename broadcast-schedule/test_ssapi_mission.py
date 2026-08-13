@@ -16,7 +16,9 @@ if str(ROOT) not in sys.path:
 from credits_store import (  # noqa: E402
     CreditsStore,
     _INGEST_DEDUP,
+    apply_ssapi_donation,
     apply_ssapi_mission,
+    serialize_donation_notes,
     serialize_mission_runs,
 )
 from ssapi_mission_collector import decode_ssapi_payload  # noqa: E402
@@ -235,6 +237,72 @@ class SsapiMissionTests(unittest.TestCase):
         by_key = {row["key"]: row for row in runs}
         self.assertEqual(by_key["a"]["status"], "pending")
         self.assertEqual(by_key["b"]["status"], "fail")
+
+    def test_ssapi_donation_keeps_text_without_counting(self) -> None:
+        self.store.ingest_events(
+            [
+                {
+                    "action": "BALLOON_GIFTED",
+                    "at": "2026-08-13T12:20:00Z",
+                    "message": {
+                        "userId": "donor1",
+                        "userNickname": "후원자",
+                        "count": 50,
+                    },
+                },
+                {
+                    "action": "SSAPI_DONATION",
+                    "at": "2026-08-13T12:20:01Z",
+                    "message": {
+                        "_id": "ssapi-1",
+                        "user_id": "donor1",
+                        "nickname": "후원자",
+                        "cnt": 50,
+                        "message": "밤양갱 신청이요",
+                    },
+                },
+            ],
+            station_id="sirianrain",
+            source="ssapi",
+            mark_sdk=False,
+        )
+        session = self.store.load_session()
+        self.assertEqual(session["donations"]["donor1"]["total"], 50)
+        notes = serialize_donation_notes(session)
+        self.assertEqual(len(notes), 1)
+        self.assertEqual(notes[0]["text"], "밤양갱 신청이요")
+        self.assertEqual(notes[0]["name"], "후원자")
+
+    def test_empty_donation_message_is_ignored(self) -> None:
+        session = self._session()
+        self.assertIsNone(
+            apply_ssapi_donation(
+                session,
+                {"user_id": "donor1", "nickname": "후원자", "cnt": 10, "message": ""},
+                ts="2026-08-13T12:21:00Z",
+            )
+        )
+        self.assertEqual(serialize_donation_notes(session), [])
+
+    def test_sdk_donation_text_is_kept_if_present(self) -> None:
+        self.store.ingest_events(
+            [
+                {
+                    "action": "BALLOON_GIFTED",
+                    "at": "2026-08-13T12:22:00Z",
+                    "message": {
+                        "userId": "donor2",
+                        "userNickname": "방셀러",
+                        "count": 30,
+                        "message": "방셀 스티커",
+                    },
+                }
+            ],
+            station_id="sirianrain",
+            source="collector",
+        )
+        notes = serialize_donation_notes(self.store.load_session())
+        self.assertEqual(notes[0]["text"], "방셀 스티커")
 
 
 if __name__ == "__main__":
