@@ -428,12 +428,22 @@
     const arr = Array.isArray(vals) ? vals.filter((v) => Number.isFinite(Number(v))) : [];
     if (!arr.length) return [];
     if (arr.length <= n) return arr.map(Number);
-    const out = [];
+    const peakIdx = arr.reduce((best, v, i) => (v > arr[best] ? i : best), 0);
+    const idxs = new Set([0, arr.length - 1, peakIdx]);
     for (let i = 0; i < n; i++) {
-      const idx = Math.round((i * (arr.length - 1)) / (n - 1));
-      out.push(Number(arr[idx]));
+      idxs.add(Math.round((i * (arr.length - 1)) / (n - 1)));
     }
-    return out;
+    return [...idxs]
+      .sort((a, b) => a - b)
+      .map((i) => Number(arr[i]));
+  }
+
+  function parsePeakHint(slide) {
+    const n = Number(slide?.peakViewers);
+    if (Number.isFinite(n) && n > 0) return n;
+    const digits = String(slide?.peakViewersLabel || "").replace(/[^\d]/g, "");
+    const parsed = Number(digits);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
   }
 
   function pathSmoothFromXY(pts) {
@@ -460,13 +470,17 @@
     return d;
   }
 
-  function viewerSparkSvg(vals) {
-    const series = downsampleSeries(vals, 18);
+  function viewerSparkSvg(vals, peakHint) {
+    const raw = Array.isArray(vals)
+      ? vals.filter((v) => Number.isFinite(Number(v))).map(Number)
+      : [];
+    // 분 단위 전체 시계열을 쓰고, 6시간 초과분만 피크 보존 다운샘플
+    const series = downsampleSeries(raw, 360);
     if (series.length < 2) return "";
     const w = 280;
     const h = 88;
     const pad = 4;
-    const max = Math.max(...series, 1);
+    const max = Math.max(...series, Number(peakHint) || 0, 1);
     const min = Math.min(...series, 0);
     const span = Math.max(max - min, 1);
     const linePts = series.map((v, i) => {
@@ -490,7 +504,7 @@
 
   function analyticsBody(slide) {
     const range = String(slide.timeRangeLabel || "").trim();
-    const chart = viewerSparkSvg(slide.viewers);
+    const chart = viewerSparkSvg(slide.viewers, parsePeakHint(slide));
     const metrics = [
       ["평균 시청", slide.avgViewersLabel],
       ["최고 시청", slide.peakViewersLabel],
