@@ -1035,6 +1035,11 @@
   color: #4a3a7a;
 }
 
+.ending-dev-missions__status.is-unknown {
+  background: #e8edf5;
+  color: #5a6b84;
+}
+
 .ending-dev-missions__kind {
   font-size: 0.7rem;
   font-weight: 700;

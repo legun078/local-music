@@ -983,6 +983,7 @@ MISSION_STATUS_LABELS = {
     "success": "성공",
     "fail": "실패",
     "draw": "무승부",
+    "unknown": "결과 미수집",
 }
 MISSION_KIND_LABELS = {
     "challenge": "도전",
@@ -1229,6 +1230,107 @@ def serialize_mission_runs(session: dict[str, Any] | None) -> list[dict[str, Any
             }
         )
     return out
+
+
+def close_open_mission_runs(session: dict[str, Any], status: str = "unknown") -> int:
+    n = 0
+    for row in ensure_mission_runs(session):
+        if str(row.get("status") or "") == "pending":
+            row["status"] = status
+            n += 1
+    return n
+
+
+def backfill_mission_runs_from_gifts(
+    session: dict[str, Any],
+    events: list[dict[str, Any]] | None,
+    *,
+    gap_sec: int = 40 * 60,
+) -> list[dict[str, Any]]:
+    """로우 GIFTED만으로 미션 구간을 복원. 제목·성공/실패는 없음."""
+    session = session if isinstance(session, dict) else {}
+    session["missionRuns"] = []
+    rows = [ev for ev in (events or []) if isinstance(ev, dict)]
+    rows.sort(key=lambda ev: str(ev.get("at") or ev.get("receivedAt") or ""))
+    last_at: datetime | None = None
+    for ev in rows:
+        action = str(ev.get("action") or "CHALLENGE_MISSION_GIFTED").strip().upper()
+        if action not in MISSION_GIFT_ACTIONS:
+            continue
+        msg = ev.get("message") if isinstance(ev.get("message"), dict) else ev
+        if not isinstance(msg, dict):
+            continue
+        ts = str(ev.get("at") or msg.get("at") or "")
+        at = parse_iso(ts)
+        if last_at and at and (at - last_at).total_seconds() > gap_sec:
+            close_open_mission_runs(session, "unknown")
+        uid = str(msg.get("userId") or "").strip()
+        name = str(msg.get("userNickname") or msg.get("name") or uid).strip()
+        try:
+            count = int(msg.get("count") or msg.get("value") or 0)
+        except (TypeError, ValueError):
+            count = 0
+        if not uid or count <= 0:
+            continue
+        note_mission_gift(session, action=action, user_id=uid, name=name, count=count, ts=ts)
+        last_at = at or last_at
+    close_open_mission_runs(session, "unknown")
+    for row in ensure_mission_runs(session):
+        if not str(row.get("title") or "").strip():
+            row["title"] = f"{mission_kind_label(row.get('kind'))} 미션"
+        if row.get("status") == "unknown" and not row.get("endedAt"):
+            row["endedAt"] = str(row.get("startedAt") or "")
+    return ensure_mission_runs(session)
+
+
+def append_leftover_mission_donors(session: dict[str, Any]) -> dict[str, Any] | None:
+    """세션 missions 집계 중 복원 구간에 없는 후원자를 별도 칸으로 남긴다."""
+    missions = session.get("missions") if isinstance(session.get("missions"), dict) else {}
+    runs = ensure_mission_runs(session)
+    seen: set[str] = set()
+    accounted: dict[str, int] = {}
+    for run in runs:
+        donors = run.get("donors") if isinstance(run.get("donors"), dict) else {}
+        for uid, drow in donors.items():
+            seen.add(str(uid))
+            accounted[str(uid)] = accounted.get(str(uid), 0) + int((drow or {}).get("total") or 0)
+    leftover: list[tuple[str, str, int]] = []
+    for uid, row in missions.items():
+        if not isinstance(row, dict):
+            continue
+        total = int(row.get("total") or 0)
+        used = int(accounted.get(str(uid)) or 0)
+        extra = total - used
+        if extra > 0:
+            leftover.append((str(uid), str(row.get("name") or uid), extra))
+    if not leftover:
+        return None
+    run = _empty_mission_run("challenge", len(runs) + 1)
+    run["status"] = "unknown"
+    run["title"] = "기록된 미션 후원"
+    for uid, name, total in leftover:
+        _add_mission_donor(run, uid, name, total)
+    runs.append(run)
+    return run
+
+
+def mission_section_items_from_runs(session: dict[str, Any] | None) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for i, row in enumerate(serialize_mission_runs(session), start=1):
+        bits = [row["statusLabel"]]
+        if int(row.get("total") or 0) > 0:
+            bits.append(f"{int(row['total']):,}개")
+        items.append(
+            {
+                "rank": i,
+                "name": row["title"],
+                "value": " · ".join(bits),
+                "status": row["status"],
+                "kind": row["kind"],
+            }
+        )
+    return items
+
 
 # 하위 호환 별칭
 MVP_CHAT_ACTIONS = CHAT_ACTIONS
