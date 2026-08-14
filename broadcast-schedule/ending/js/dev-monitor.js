@@ -531,6 +531,8 @@
 
   function setChartZoomLevel(zoom) {
     const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
+    const prevZoom = chartZoomLevel();
+    const prevPan = chartPanLevel();
     try {
       sessionStorage.setItem(CHART_ZOOM_STORAGE_KEY, String(z));
     } catch (_) {
@@ -542,7 +544,26 @@
       } catch (_) {
         /* ignore */
       }
+    } else {
+      const range = chartActiveFullTimeRange();
+      if (range) {
+        const { fullMinMs, fullMaxMs } = range;
+        let centerMs;
+        if (chartIsFitZoom(prevZoom)) {
+          centerMs = (fullMinMs + fullMaxMs) / 2;
+        } else {
+          const oldWin = chartVisibleWindow(fullMinMs, fullMaxMs, prevZoom, prevPan);
+          centerMs = (oldWin.viewMinMs + oldWin.viewMaxMs) / 2;
+        }
+        const nextPan = chartPanForCenterTime(fullMinMs, fullMaxMs, centerMs, z);
+        try {
+          sessionStorage.setItem(CHART_PAN_STORAGE_KEY, String(nextPan));
+        } catch (_) {
+          /* ignore */
+        }
+      }
     }
+    chartPanWheelPending = null;
     if (!lastData) return;
     const acc = resolveAccount(lastData, activeTab);
     renderDataPanel(acc.sections, (acc.session || {}).collected || {});
@@ -618,6 +639,75 @@
   }
 
   let chartPanScrollTimer = null;
+  let chartPanWheelTimer = null;
+  let chartPanWheelPending = null;
+
+  function chartActiveFullTimeRange() {
+    const wrap = els.dataBody?.querySelector?.("[data-chart-wrap]");
+    if (wrap) {
+      const fullMinMs = Number(wrap.dataset.chartFullMin);
+      const fullMaxMs = Number(wrap.dataset.chartFullMax);
+      if (Number.isFinite(fullMinMs) && Number.isFinite(fullMaxMs) && fullMaxMs > fullMinMs) {
+        return { fullMinMs, fullMaxMs };
+      }
+    }
+    if (!lastData) return null;
+    const acc = resolveAccount(lastData, activeTab);
+    const extras = devLiveExtras((acc.session || {}).collected || {});
+    return chartTimeRangeFromPoints(
+      seriesPoints(extras?.metricsSeries?.viewers),
+      seriesPoints(extras?.metricsSeries?.chats)
+    );
+  }
+
+  function chartPanWheelDelta(ev) {
+    let dx = Number(ev?.deltaX) || 0;
+    if (Math.abs(dx) < 0.5 && ev?.shiftKey) {
+      dx = Number(ev?.deltaY) || 0;
+    }
+    return dx;
+  }
+
+  function chartPanScrollMaxPx(viewportWidth) {
+    const zoom = chartZoomLevel();
+    if (zoom <= CHART_ZOOM_MIN + 0.001) return 0;
+    return Math.max(0, viewportWidth * (zoom - 1));
+  }
+
+  function scheduleChartPanFromWheel(wrap, deltaPx, viewportWidth) {
+    if (!wrap || chartIsFitZoom()) return;
+    const maxScroll = chartPanScrollMaxPx(viewportWidth);
+    if (maxScroll <= 0) return;
+    const base = chartPanWheelPending ?? chartPanLevel();
+    chartPanWheelPending = Math.max(0, Math.min(1, base + deltaPx / maxScroll));
+    const chart = wrap.closest(".ending-dev-chart");
+    const scroller = chart?.querySelector?.("[data-chart-pan-scroll]");
+    if (scroller) {
+      const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      scroller.scrollLeft = Math.round(chartPanWheelPending * max);
+    }
+    clearTimeout(chartPanWheelTimer);
+    chartPanWheelTimer = setTimeout(() => {
+      const pan = chartPanWheelPending;
+      chartPanWheelPending = null;
+      if (pan == null) return;
+      if (Math.abs(pan - chartPanLevel()) < 0.002) return;
+      setChartPanLevel(pan);
+    }, 60);
+  }
+
+  function onChartPanWheel(ev) {
+    if (chartIsFitZoom()) return;
+    const chart = ev.target?.closest?.(".ending-dev-chart");
+    if (!chart) return;
+    const viewport = chart.querySelector(".ending-dev-chart__viewport");
+    const wrap = chart.querySelector("[data-chart-wrap]");
+    if (!viewport || !wrap) return;
+    const dx = chartPanWheelDelta(ev);
+    if (Math.abs(dx) < 0.5) return;
+    ev.preventDefault();
+    scheduleChartPanFromWheel(wrap, dx, viewport.clientWidth);
+  }
   function scheduleChartPanFromScroll(scroller) {
     if (!scroller) return;
     clearTimeout(chartPanScrollTimer);
@@ -783,7 +873,6 @@
   function renderChartTimeAxisDual(tickTimes, xAtTime, pad, w, h) {
     const yGridBottom = pad.t + (h - pad.t - pad.b);
     const yLabel = h - 8;
-    const innerW = w - pad.l - pad.r;
     const labels = chartFilterTimeTicksForLabels(tickTimes, xAtTime, 58);
     return tickTimes
       .map((ms, i) => {
@@ -3134,6 +3223,7 @@
     if (scroller) scheduleChartPanFromScroll(scroller);
     scheduleScrollPersist();
   }, { passive: true, capture: true });
+  els.dataBody?.addEventListener("wheel", onChartPanWheel, { passive: false, capture: true });
   window.addEventListener(
     "resize",
     () => {
