@@ -31,7 +31,6 @@
     peak: document.getElementById("acc-peak"),
     peakImg: document.getElementById("acc-peak-img"),
     peakCap: document.getElementById("acc-peak-cap"),
-    dataNav: document.getElementById("acc-data-nav"),
     dataBody: document.getElementById("acc-data-body"),
     dataHint: document.getElementById("acc-data-hint"),
     segments: document.getElementById("acc-segments"),
@@ -1909,6 +1908,168 @@
     </div>`;
   }
 
+  function renderOverviewStats(counts) {
+    const c = counts && typeof counts === "object" ? counts : {};
+    const chips = [
+      ["peakViewers", "최고 시청", (v) => `${fmtNum(v)}명`],
+      ["chatCount", "채팅", (v) => `${fmtNum(v)}회`],
+      ["chatters", "채팅 참여", (v) => `${fmtNum(v)}명`],
+      ["watchers", "시청 시간", (v) => `${fmtNum(v)}명`],
+      ["donors", "후원", (v) => `${fmtNum(v)}명`],
+      ["balloonTotal", "별풍", (v) => `${fmtNum(v)}개`],
+      ["subscribers", "신규 구독", (v) => `${fmtNum(v)}`],
+      ["subscriberRenewals", "연속 구독", (v) => `${fmtNum(v)}`],
+      ["subscriptionGifts", "구독 선물", (v) => `${fmtNum(v)}`],
+      ["fanclubJoins", "팬클럽", (v) => `${fmtNum(v)}`],
+      ["emoticons", "이모티콘", (v) => `${fmtNum(v)}`],
+      ["missions", "미션", (v) => `${fmtNum(v)}`],
+    ]
+      .map(([key, label, fmt]) => {
+        const v = Number(c[key] || 0);
+        if (!v) return null;
+        return `<span class="ending-dev-overview-stat"><span class="ending-dev-overview-stat__k">${esc(
+          label
+        )}</span><strong class="ending-dev-overview-stat__v">${esc(fmt(v))}</strong></span>`;
+      })
+      .filter(Boolean);
+    if (!chips.length) {
+      return `<p class="ending-dev-overview-stats ending-dev-overview-stats--empty">집계 요약 없음</p>`;
+    }
+    return `<div class="ending-dev-overview-stats" role="list">${chips.join("")}</div>`;
+  }
+
+  function categoryHasData(cat) {
+    if (!cat || typeof cat !== "object") return false;
+    if (Number(cat.count || 0) > 0) return true;
+    if ((cat.items?.length || 0) > 0) return true;
+    if (cat.kind === "missionRuns" && (cat.missionRuns?.length || 0) > 0) return true;
+    if (cat.kind === "ssapi" && (cat.ssapi?.eventCount || 0) > 0) return true;
+    if (cat.kind === "donationNotes" && (cat.donationNotes?.length || 0) > 0) return true;
+    return false;
+  }
+
+  function renderOverviewCategoryBody(cat, limit) {
+    if (cat.kind === "missionRuns") {
+      const rows = normalizeMissionRuns(cat.missionRuns).slice(0, limit > 0 ? limit : undefined);
+      if (!rows.length) {
+        return `<p class="ending-dev-empty ending-dev-data-empty">미션 없음</p>`;
+      }
+      return `<ol class="ending-dev-missions ending-dev-missions--compact">
+        ${rows
+          .map((row) => {
+            const when = row.endedAt || row.startedAt;
+            return `<li>
+              <span class="ending-dev-missions__status is-${esc(row.status)}">${esc(row.statusLabel)}</span>
+              <span class="ending-dev-missions__title" title="${esc(row.title)}">${esc(row.title)}</span>
+              ${row.total ? `<span class="ending-dev-missions__total">${esc(fmtNum(row.total))}개</span>` : ""}
+              ${when ? `<span class="ending-dev-missions__at">${esc(chartClockLabel(when))}</span>` : ""}
+            </li>`;
+          })
+          .join("")}
+      </ol>`;
+    }
+    if (cat.kind === "ssapi") {
+      const data = normalizeSsapiAssist(cat.ssapi);
+      const events = data.events.slice(0, limit > 0 ? limit : 8);
+      if (!events.length) {
+        return `${renderSsapiStatus(data)}<p class="ending-dev-empty ending-dev-data-empty">이벤트 없음</p>`;
+      }
+      return `${renderSsapiStatus(data)}<ol class="ending-dev-ssapi-list ending-dev-ssapi-list--compact">
+        ${events
+          .map((row) => {
+            const title = row.title || row.text || (row.kind === "donation" ? "별풍" : "미션");
+            return `<li>
+              <span class="ending-dev-ssapi-list__phase is-${esc(row.phase || "event")}">${esc(
+                row.phaseLabel
+              )}</span>
+              <span class="ending-dev-ssapi-list__title" title="${esc(title)}">${esc(title)}</span>
+              ${row.name ? `<span class="ending-dev-ssapi-list__name">${esc(row.name)}</span>` : ""}
+              ${row.at ? `<span class="ending-dev-ssapi-list__at">${esc(chartClockLabel(row.at))}</span>` : ""}
+            </li>`;
+          })
+          .join("")}
+      </ol>`;
+    }
+    if (cat.kind === "donationNotes") {
+      const shown = sliceItemsForLimit(cat.items, limit);
+      const notes = normalizeDonationNotes(cat.donationNotes).slice(0, limit > 0 ? limit : 5);
+      const list = renderDataList(shown);
+      const noteBlock =
+        notes.length > 0
+          ? `<div class="ending-dev-overview-card__notes">${renderDonationNotes(notes)}</div>`
+          : "";
+      return `${list}${noteBlock}`;
+    }
+    return renderDataList(sliceItemsForLimit(cat.items, limit));
+  }
+
+  function renderOverviewCategoryCard(cat, limit) {
+    const wide = cat.kind === "ssapi" || cat.kind === "missionRuns" || cat.kind === "donationNotes";
+    const countLabel =
+      cat.count > 0 ? `${fmtNum(cat.count)}건` : cat.pending ? "대기" : "0건";
+    return `<article class="ending-dev-overview-card${wide ? " is-wide" : ""}" data-cat="${esc(cat.id)}">
+      <header class="ending-dev-overview-card__head">
+        <h5 class="ending-dev-overview-card__title">${esc(cat.title)}</h5>
+        <span class="ending-dev-overview-card__count">${esc(countLabel)}</span>
+      </header>
+      <div class="ending-dev-overview-card__body">${renderOverviewCategoryBody(cat, limit)}</div>
+    </article>`;
+  }
+
+  function renderOverviewPending(cats) {
+    const list = (Array.isArray(cats) ? cats : []).filter((c) => c && !categoryHasData(c));
+    if (!list.length) return "";
+    return `<div class="ending-dev-overview-pending">
+      <span class="ending-dev-overview-pending__label">수집 대기</span>
+      ${list
+        .map(
+          (c) =>
+            `<span class="ending-dev-overview-pending__chip">${esc(c.title)}</span>`
+        )
+        .join("")}
+    </div>`;
+  }
+
+  function renderOverviewPanel(cats, collected) {
+    const metricsCat = (Array.isArray(cats) ? cats : []).find((c) => c.id === "metricsChart") || {};
+    const counts = metricsCat.counts || (collected || {}).counts || {};
+    const replay = devLiveExtras(collected)?.replay || {};
+    const digest = renderMetricsDigest(metricsCat, counts, replay, metricsChartMode);
+    const rankCats = (Array.isArray(cats) ? cats : []).filter((c) => c.id !== "metricsChart");
+    const readyCats = rankCats.filter((c) => categoryHasData(c));
+    const limit = dataLimit > 0 ? dataLimit : 0;
+    const totalItems = readyCats.reduce(
+      (n, c) => n + Math.max(Number(c.count || 0), c.items?.length || 0),
+      0
+    );
+    const cards = readyCats.map((c) => renderOverviewCategoryCard(c, limit)).join("");
+    return {
+      html: `<div class="ending-dev-overview-panel">
+        <div class="ending-dev-overview-panel__head">
+          <div class="ending-dev-overview-panel__lead">
+            <h4 class="ending-dev-overview-panel__title">종합</h4>
+            <p class="ending-dev-overview-panel__meta">${esc(
+              readyCats.length ? `${readyCats.length}개 영역 · ${fmtNum(totalItems)}건` : "데이터 없음"
+            )}</p>
+          </div>
+          <div class="ending-dev-overview-panel__tools">
+            ${renderChartModeToggles(metricsChartMode)}
+            ${renderLimitToggles(totalItems)}
+          </div>
+        </div>
+        ${digest.html}
+        ${renderOverviewStats(counts)}
+        ${
+          cards
+            ? `<div class="ending-dev-overview-grid">${cards}</div>`
+            : `<p class="ending-dev-empty">카테고리별 데이터가 아직 없습니다.</p>`
+        }
+        ${renderOverviewPending(rankCats)}
+      </div>`,
+      bind: digest.bind,
+    };
+  }
+
   function renderDataList(items) {
     const list = Array.isArray(items) ? items : [];
     if (!list.length) {
@@ -1945,78 +2106,28 @@
         return a._ord - b._ord;
       });
     dataCatsCache = cats;
-    const readyN = cats.filter((c) => c.count > 0).length;
+    const readyN = cats.filter((c) => categoryHasData(c)).length;
+    const totalN = cats.reduce((n, c) => n + (Number(c.count) || 0), 0);
     if (els.dataHint) {
       els.dataHint.textContent = cats.length
-        ? `${readyN}개 카테고리 · ${cats.reduce((n, c) => n + (c.count || 0), 0)}건`
+        ? `종합 · ${readyN}개 영역 · ${totalN}건`
         : "데이터 없음";
     }
-    if (!els.dataNav || !els.dataBody) return;
+    if (els.dataNav) {
+      els.dataNav.innerHTML = "";
+      els.dataNav.hidden = true;
+    }
+    if (!els.dataBody) return;
 
     if (!cats.length) {
-      els.dataNav.innerHTML = "";
       els.dataBody.innerHTML = `<p class="ending-dev-empty">수집된 데이터가 없습니다.</p>`;
       return;
     }
 
-    if (!dataTabId || !cats.some((c) => c.id === dataTabId)) {
-      const firstReady = cats.find((c) => c.count > 0) || cats[0];
-      dataTabId = firstReady.id;
-    }
-
-    els.dataNav.innerHTML = cats
-      .map((c) => {
-        const on = c.id === dataTabId;
-        const state = c.count > 0 ? "is-ready" : "is-pending";
-        return `<button type="button" class="ending-dev-data-tab ${state}${on ? " is-on" : ""}" role="tab" aria-selected="${
-          on ? "true" : "false"
-        }" data-id="${esc(c.id)}">
-          <span class="ending-dev-data-tab__title">${esc(c.title)}</span>
-          <span class="ending-dev-data-tab__count">${esc(
-            c.kind === "metricsChart" ? c.countLabel || metricsTabCountLabel(c.viewerCount, c.chatCount) : c.count > 0 ? c.count : "대기"
-          )}</span>
-        </button>`;
-      })
-      .join("");
-
-    const active = cats.find((c) => c.id === dataTabId) || cats[0];
-    const counts = active.counts || (collected || {}).counts || {};
-    const replay = devLiveExtras(collected)?.replay || {};
-    let panelBody = "";
-    let chartBind = null;
-    if (active.kind === "metricsChart") {
-      const digest = renderMetricsDigest(active, counts, replay, metricsChartMode);
-      panelBody = digest.html;
-      chartBind = digest.bind;
-    } else if (active.kind === "missionRuns") {
-      panelBody = renderMissionRunsPanel(active.missionRuns);
-    } else if (active.kind === "ssapi") {
-      panelBody = renderSsapiPanel(active.ssapi);
-    } else if (active.kind === "donationNotes") {
-      const shown = sliceItemsForLimit(active.items, dataLimit);
-      const notes = renderDonationNotes(active.donationNotes);
-      panelBody = `${renderDataList(shown)}${notes}`;
-    } else {
-      const shown = sliceItemsForLimit(active.items, dataLimit);
-      panelBody = renderDataList(shown);
-    }
-    const total = active.items?.length || active.count || 0;
-    const showLimit =
-      active.kind !== "metricsChart" && active.kind !== "missionRuns" && active.kind !== "ssapi";
-    const panelHeadExtra =
-      active.kind === "metricsChart"
-        ? renderChartModeToggles(metricsChartMode)
-        : `<span class="ending-dev-data-panel__meta">실시간</span>`;
-    els.dataBody.innerHTML = `
-      <div class="ending-dev-data-panel">
-        <div class="ending-dev-data-panel__head">
-          <h4 class="ending-dev-data-panel__title">${esc(active.panelTitle || active.title)}</h4>
-          ${showLimit ? renderLimitToggles(total) : panelHeadExtra}
-        </div>
-        ${panelBody}
-      </div>`;
-    if (chartBind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, chartBind);
-    else if (chartBind) mountMetricChartInteraction(els.dataBody, chartBind);
+    const overview = renderOverviewPanel(cats, collected);
+    els.dataBody.innerHTML = overview.html;
+    if (overview.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, overview.bind);
+    else if (overview.bind) mountMetricChartInteraction(els.dataBody, overview.bind);
   }
 
   function onChartModeClick(mode) {
@@ -2425,11 +2536,6 @@
       el.classList.toggle("is-on", el.getAttribute("data-archive-id") === aid);
     });
     loadHistoryArchive(aid);
-  });
-  els.dataNav?.addEventListener("click", (ev) => {
-    const btn = ev.target?.closest?.("[data-id]");
-    if (!btn) return;
-    onDataTabClick(btn.getAttribute("data-id"));
   });
   els.dataBody?.addEventListener("click", (ev) => {
     const modeBtn = ev.target?.closest?.("[data-chart-mode]");
