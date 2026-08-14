@@ -1275,6 +1275,7 @@ def _session_collected_preview(session: dict | None, *, limit: int = 10) -> dict
             "emoticons": len(emo_rows),
             "missions": len(serialize_mission_runs(session)),
             "peakViewers": int(session.get("peakViewers") or 0),
+            "peakViewersAt": str(session.get("peakViewersAt") or ""),
             "lastViewerCount": int(session.get("lastViewerCount") or 0),
         },
     }

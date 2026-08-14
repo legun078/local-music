@@ -365,6 +365,82 @@
       .map((p) => ({ at: String(p.at), v: Number(p.v) }));
   }
 
+  function peakSeriesPoint(points) {
+    let best = null;
+    for (const p of Array.isArray(points) ? points : []) {
+      if (!p || !Number.isFinite(Number(p.v))) continue;
+      if (!best || p.v > best.v || (p.v === best.v && String(p.at) < String(best.at))) {
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  function nearestSeriesPointAtTime(points, at) {
+    const want = parseChartDate(at)?.getTime();
+    if (!want) return null;
+    let best = null;
+    let bestDist = Infinity;
+    for (const p of Array.isArray(points) ? points : []) {
+      const t = parseChartDate(p?.at)?.getTime();
+      if (t == null) continue;
+      const d = Math.abs(t - want);
+      if (d < bestDist) {
+        bestDist = d;
+        best = p;
+      }
+    }
+    return best;
+  }
+
+  function resolveViewerPeak(points, counts) {
+    const hinted = nearestSeriesPointAtTime(points, counts?.peakViewersAt);
+    const seriesPeak = peakSeriesPoint(points);
+    const at = String(hinted?.at || seriesPeak?.at || "").trim();
+    const v = Number(counts?.peakViewers) || hinted?.v || seriesPeak?.v || 0;
+    if (!at || v <= 0) return null;
+    return { kind: "viewers", at, v };
+  }
+
+  function resolveChatPeak(points) {
+    const p = peakSeriesPoint(points);
+    if (!p || p.v <= 0) return null;
+    return { kind: "chat", at: p.at, v: p.v };
+  }
+
+  function renderPeakJumpBar(jumps) {
+    const items = (Array.isArray(jumps) ? jumps : []).filter(Boolean);
+    if (!items.length) return "";
+    return `<div class="ending-dev-chart__jumps" role="group" aria-label="피크 바로가기">
+      ${items
+        .map((j) => {
+          const isChat = j.kind === "chat";
+          const label = isChat ? "최고 화력" : "최고 시청";
+          const value = isChat ? `${fmtNum(j.v)}회/분` : `${fmtNum(j.v)}명`;
+          const clock = chartClockLabel(j.at);
+          return `<button type="button" class="ending-dev-chart__jump is-${esc(
+            j.kind
+          )}" data-peak-jump="${esc(j.at)}">
+            <span class="ending-dev-chart__jump-k">${esc(label)}</span>
+            <strong>${esc(value)}</strong>
+            <span class="ending-dev-chart__jump-t">${esc(clock)}</span>
+          </button>`;
+        })
+        .join("")}
+    </div>`;
+  }
+
+  function bindPeakJumpButtons(root, wrap) {
+    if (!root || !wrap) return;
+    root.querySelectorAll("[data-peak-jump]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const at = String(btn.getAttribute("data-peak-jump") || "").trim();
+        if (!at) return;
+        wrap.dispatchEvent(new CustomEvent("ending-chart-jump", { detail: { at } }));
+      });
+    });
+  }
+
   function mergeMetricsTimeline(viewerPoints, chatPoints) {
     const map = new Map();
     const touch = (at, key, v) => {
@@ -1056,6 +1132,12 @@
     function pinAt(clientX) {
       const hit = nearestSeriesPointAtChartX(points, chartClientXToSvgX(svg, clientX, w), xAt);
       if (!hit) return;
+      pinHit(hit);
+    }
+
+    function pinHit(hit) {
+      if (!hit) return;
+      showAtChartX(hit.chartX);
       applyChartReplay(
         wrap,
         config.replay,
@@ -1068,12 +1150,27 @@
       );
     }
 
+    function jumpToAt(at) {
+      const p = nearestSeriesPointAtTime(points, at);
+      if (!p) return;
+      const idx = points.findIndex((row) => row.at === p.at);
+      pinHit({
+        at: p.at,
+        v: p.v,
+        chartX: xAt(idx >= 0 ? idx : 0),
+        index: idx,
+      });
+    }
+
     overlay.addEventListener("mousemove", (ev) => {
       showAtChartX(chartClientXToSvgX(svg, ev.clientX, w));
     });
     overlay.addEventListener("mouseleave", hideHover);
     overlay.addEventListener("click", (ev) => {
       pinAt(ev.clientX);
+    });
+    wrap.addEventListener("ending-chart-jump", (ev) => {
+      jumpToAt(ev.detail?.at);
     });
   }
 
@@ -1165,11 +1262,10 @@
       delete wrap.dataset.hoverAt;
     }
 
-    function pinAt(clientX) {
-      const hoverMs = chartXToTimeMs(chartClientXToSvgX(svg, clientX, w), pad, w, minMs, maxMs);
-      const snap = nearestMergedPointAtTime(merged, hoverMs);
+    function pinSnap(snap) {
       if (!snap) return;
       const snapAt = snap.at;
+      showAtChartX(xAtTime(snapAt));
       applyChartReplay(
         wrap,
         config.replay,
@@ -1190,12 +1286,25 @@
       );
     }
 
+    function pinAt(clientX) {
+      const hoverMs = chartXToTimeMs(chartClientXToSvgX(svg, clientX, w), pad, w, minMs, maxMs);
+      pinSnap(nearestMergedPointAtTime(merged, hoverMs));
+    }
+
+    function jumpToAt(at) {
+      const want = parseChartDate(at)?.getTime();
+      pinSnap(nearestMergedPointAtTime(merged, want));
+    }
+
     overlay.addEventListener("mousemove", (ev) => {
       showAtChartX(chartClientXToSvgX(svg, ev.clientX, w));
     });
     overlay.addEventListener("mouseleave", hideHover);
     overlay.addEventListener("click", (ev) => {
       pinAt(ev.clientX);
+    });
+    wrap.addEventListener("ending-chart-jump", (ev) => {
+      jumpToAt(ev.detail?.at);
     });
   }
 
@@ -1240,7 +1349,9 @@
     const lineColor = o.lineColor || "var(--dev-blue)";
     const areaColor = o.areaColor || "rgba(47, 95, 154, 0.12)";
     const meta = typeof o.meta === "function" ? o.meta(points, maxV) : String(o.meta || "");
+    const jumps = Array.isArray(o.jumps) ? o.jumps.filter(Boolean) : [];
     return `<div class="ending-dev-chart">
+      ${renderPeakJumpBar(jumps)}
       ${meta ? `<p class="ending-dev-chart__meta">${esc(meta)} · 호버로 시점 확인 · 클릭하면 다시보기</p>` : `<p class="ending-dev-chart__meta">호버로 시점 확인 · 클릭하면 다시보기</p>`}
       <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip>${chartTipIdleHtml()}</div>
@@ -1285,6 +1396,7 @@
       valueSuffix: opts.valueSuffix || "",
       formatValue: opts.formatValue,
     });
+    bindPeakJumpButtons(root, wrap);
   }
 
   function renderDualMetricChartPanel(viewerPoints, chatPoints, counts, replay) {
@@ -1352,7 +1464,9 @@
       .join("");
     const peak = Number(counts?.peakViewers) || 0;
     const lastViewers = Number(counts?.lastViewerCount) || viewers[viewers.length - 1]?.v || 0;
-    const peakChat = chats.length ? Math.max(...chats.map((p) => p.v)) : 0;
+    const viewerPeak = resolveViewerPeak(viewers, counts);
+    const chatPeak = resolveChatPeak(chats);
+    const peakChat = chatPeak?.v || 0;
     const lastChat = chats.length ? chats[chats.length - 1].v : 0;
     const totalChat = Number(counts?.chatCount) || chats.reduce((n, p) => n + p.v, 0);
     const meta = [
@@ -1367,6 +1481,7 @@
       .join(" · ");
     return {
       html: `<div class="ending-dev-chart ending-dev-chart--dual">
+      ${renderPeakJumpBar([viewerPeak, chatPeak])}
       <p class="ending-dev-chart__meta">${esc(meta)} · 호버로 시점 확인 · 클릭하면 다시보기</p>
       <div class="ending-dev-chart__legend" aria-hidden="true">
         <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--viewers">시청자</span>
@@ -1428,16 +1543,19 @@
       maxViewers: opts.maxViewers,
       maxChats: opts.maxChats,
     });
+    bindPeakJumpButtons(root, wrap);
   }
 
   function renderViewersChartPanel(metricsSeries, counts, replay) {
     const points = seriesPoints(metricsSeries?.viewers);
     const peak = Number(counts?.peakViewers) || 0;
     const last = Number(counts?.lastViewerCount) || points[points.length - 1]?.v || 0;
+    const viewerPeak = resolveViewerPeak(points, counts);
     return {
       html: renderMetricChartPanel(points, {
         emptyMsg: "시청자 시계열이 아직 없습니다. 라이브 폴링이 켜진 뒤 분 단위로 쌓입니다.",
         ariaLabel: "시청자 추이",
+        jumps: [viewerPeak],
         meta: () =>
           [
             peak ? `최고 ${fmtNum(peak)}명` : "",
@@ -1462,12 +1580,14 @@
     const peakMin = points.length ? Math.max(...points.map((p) => p.v)) : 0;
     const lastMin = points.length ? points[points.length - 1].v : 0;
     const total = Number(counts?.chatCount) || points.reduce((n, p) => n + p.v, 0);
+    const chatPeak = resolveChatPeak(points);
     return {
       html: renderMetricChartPanel(points, {
         emptyMsg: "채팅 화력 시계열이 아직 없습니다. 방송 중 채팅이 수집되면 분 단위로 표시됩니다.",
         ariaLabel: "채팅 화력 추이",
         lineColor: "#c45c26",
         areaColor: "rgba(196, 92, 38, 0.14)",
+        jumps: [chatPeak],
         meta: () =>
           [
             peakMin ? `피크 ${fmtNum(peakMin)}회/분` : "",
