@@ -79,6 +79,9 @@
   let scrollRestorePending = null;
   let scrollPersistTimer = null;
   let chartViewScopeKey = "";
+  let chartPlotScrolling = false;
+  let chartPlotScrollIdleTimer = null;
+  let chartPatchDeferred = null;
 
   try {
     dataTabId = String(sessionStorage.getItem(DATA_TAB_KEY) || "").trim();
@@ -649,6 +652,20 @@
     scroller.scrollLeft = Math.max(0, Math.min(max, target));
   }
 
+  function markChartPlotScrolling(scroller) {
+    if (!scroller) return;
+    chartPlotScrolling = true;
+    clearTimeout(chartPlotScrollIdleTimer);
+    chartPlotScrollIdleTimer = setTimeout(() => {
+      chartPlotScrolling = false;
+      if (chartPatchDeferred) {
+        const pending = chartPatchDeferred;
+        chartPatchDeferred = null;
+        tryPatchDataPanel(pending.cats, pending.collected);
+      }
+    }, 280);
+  }
+
   function chartModeMatchesDom(mode, chartEl) {
     if (!chartEl) return false;
     const dual = chartEl.classList.contains("ending-dev-chart--dual");
@@ -656,8 +673,9 @@
     return mode === "viewers" || mode === "chat" ? !dual : false;
   }
 
-  /** 스크롤·축 레이아웃은 유지하고 SVG·툴바만 갱신한다. */
+  /** 스크롤·축 레이아웃은 유지하고 툴바·선 데이터만 갱신한다. 확대 pan 중·줌 상태에서는 SVG를 건드리지 않는다. */
   function patchMetricsChartInPlace(root, collected, mode) {
+    if (chartPlotScrolling || !chartIsFitZoom()) return null;
     const chart = root?.querySelector?.(".ending-dev-chart");
     if (!chart || !chartModeMatchesDom(mode, chart)) return null;
     const savedPan = captureChartPlotPan(root);
@@ -673,9 +691,7 @@
     holder.innerHTML = rendered.html;
     const fresh = holder.querySelector(".ending-dev-chart");
     const freshWrap = fresh?.querySelector?.("[data-chart-wrap]");
-    const freshStage = fresh?.querySelector?.(".ending-dev-chart__stage");
-    const stage = chart.querySelector(".ending-dev-chart__stage");
-    if (!fresh || !freshWrap || !freshStage || !stage) return null;
+    if (!fresh || !freshWrap) return null;
     if (String(freshWrap.dataset.chartWidth || "") !== String(wrap.dataset.chartWidth)) return null;
 
     const freshToolbar = fresh.querySelector(".ending-dev-chart__toolbar");
@@ -686,23 +702,38 @@
     const zoom = chart.querySelector(".ending-dev-chart__zoom");
     if (freshZoom && zoom) zoom.replaceWith(freshZoom);
 
-    const axisLeft = stage.querySelector(".ending-dev-chart__axis--left");
-    const freshAxisLeft = freshStage.querySelector(".ending-dev-chart__axis--left");
-    if (axisLeft && freshAxisLeft) axisLeft.innerHTML = freshAxisLeft.innerHTML;
-
-    const axisRight = stage.querySelector(".ending-dev-chart__axis--right");
-    const freshAxisRight = freshStage.querySelector(".ending-dev-chart__axis--right");
-    if (axisRight && freshAxisRight) axisRight.innerHTML = freshAxisRight.innerHTML;
-
     const svg = wrap.querySelector("[data-chart-svg]");
     const freshSvg = freshWrap.querySelector("[data-chart-svg]");
-    if (svg && freshSvg) svg.innerHTML = freshSvg.innerHTML;
+    if (svg && freshSvg) {
+      patchChartSvgPaths(svg, freshSvg);
+    }
 
     wrap.dataset.chartFullMin = freshWrap.dataset.chartFullMin;
     wrap.dataset.chartFullMax = freshWrap.dataset.chartFullMax;
 
     restoreChartPlotPan(root, savedPan);
     return rendered.bind || null;
+  }
+
+  function patchChartSvgPaths(svg, freshSvg) {
+    if (!svg || !freshSvg) return;
+    const sel =
+      ".ending-dev-chart__line, .ending-dev-chart__area, .ending-dev-chart__grid, .ending-dev-chart__grid-v, .ending-dev-chart__xlabel, .ending-dev-chart__peak, .ending-dev-chart__peak-badge, .ending-dev-chart__peak-lead, .ending-dev-chart__peak text";
+    const oldNodes = svg.querySelectorAll(sel);
+    const newNodes = freshSvg.querySelectorAll(sel);
+    if (oldNodes.length && oldNodes.length === newNodes.length) {
+      newNodes.forEach((node, i) => {
+        const old = oldNodes[i];
+        if (!old || old.tagName !== node.tagName) return;
+        if (node.hasAttribute("d")) old.setAttribute("d", node.getAttribute("d"));
+        ["x1", "x2", "y1", "y2", "cx", "cy", "x", "y", "width", "height"].forEach((attr) => {
+          if (node.hasAttribute(attr)) old.setAttribute(attr, node.getAttribute(attr));
+        });
+        if (node.textContent !== old.textContent) old.textContent = node.textContent;
+      });
+      return;
+    }
+    svg.innerHTML = freshSvg.innerHTML;
   }
 
   function patchOverviewPanelAux(panel, cats, collected) {
@@ -774,8 +805,20 @@
     if (!els.dataBody) return false;
     const panel = els.dataBody.querySelector(".ending-dev-overview-panel");
     if (!panel) return false;
-    const bind = patchMetricsChartInPlace(els.dataBody, collected, metricsChartMode);
-    if (bind === null) return false;
+
+    if (chartPlotScrolling) {
+      chartPatchDeferred = { cats, collected };
+      patchOverviewPanelAux(panel, cats, collected);
+      return true;
+    }
+
+    const preserveZoomedCanvas = !chartIsFitZoom();
+    let bind = null;
+    if (!preserveZoomedCanvas) {
+      bind = patchMetricsChartInPlace(els.dataBody, collected, metricsChartMode);
+      if (bind === null) return false;
+    }
+
     patchOverviewPanelAux(panel, cats, collected);
     if (bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, bind);
     else if (bind) mountMetricChartInteraction(els.dataBody, bind);
@@ -858,6 +901,7 @@
 
   function scheduleChartPanFromPlotScroll(scroller) {
     if (!scroller) return;
+    markChartPlotScrolling(scroller);
     clearTimeout(chartPanScrollTimer);
     chartPanScrollTimer = setTimeout(() => {
       const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
@@ -918,8 +962,7 @@
     const axisR = dual ? CHART_AXIS_R_DUAL : CHART_AXIS_R_SINGLE;
     const wrapAttrs = String(o.wrapAttrs || "");
     const aria = esc(o.ariaLabel || "추이");
-    return `<div class="ending-dev-chart__stage">
-      <div class="ending-dev-chart__axis ending-dev-chart__axis--left">${o.axisLeft || ""}</div>
+    return `<div class="ending-dev-chart__stage"${dual ? "" : ' data-chart-stage-single="1"'}>
       <div class="ending-dev-chart__plot-scroll" data-chart-plot-scroll tabindex="0" aria-label="그래프 시간 이동">
         <div class="ending-dev-chart__wrap" data-chart-wrap ${wrapAttrs}
           style="width:${plotW}px"
@@ -927,13 +970,14 @@
           data-chart-plot-base="${Number(o.plotBase) || 0}"
           data-chart-full-min="${o.fullMinMs}" data-chart-full-max="${o.fullMaxMs}"
           data-chart-pad="${esc(JSON.stringify(plotPad))}">
-          <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${plotW} ${h}" width="${plotW}" height="${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${aria}">
+          <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${plotW} ${h}" width="${plotW}" height="${h}" preserveAspectRatio="none" role="img" aria-label="${aria}">
             ${o.plotSvg || ""}
           </svg>
           <div class="ending-dev-chart__overlay" data-chart-overlay aria-hidden="true" style="width:${plotW}px;height:${h}px"></div>
         </div>
       </div>
-      ${dual ? `<div class="ending-dev-chart__axis ending-dev-chart__axis--right">${o.axisRight || ""}</div>` : `<div class="ending-dev-chart__axis ending-dev-chart__axis--right ending-dev-chart__axis--gutter" aria-hidden="true"></div>`}
+      <div class="ending-dev-chart__axis ending-dev-chart__axis--left" aria-hidden="true">${o.axisLeft || ""}</div>
+      ${dual ? `<div class="ending-dev-chart__axis ending-dev-chart__axis--right" aria-hidden="true">${o.axisRight || ""}</div>` : `<div class="ending-dev-chart__axis ending-dev-chart__axis--right ending-dev-chart__axis--gutter" aria-hidden="true"></div>`}
     </div>`;
   }
 
@@ -3672,7 +3716,10 @@
   window.addEventListener("scroll", scheduleScrollPersist, { passive: true });
   els.dataBody?.addEventListener("scroll", (ev) => {
     const scroller = ev.target?.closest?.("[data-chart-plot-scroll]");
-    if (scroller) scheduleChartPanFromPlotScroll(scroller);
+    if (scroller) {
+      markChartPlotScrolling(scroller);
+      scheduleChartPanFromPlotScroll(scroller);
+    }
     scheduleScrollPersist();
   }, { passive: true, capture: true });
   els.dataBody?.addEventListener("wheel", onChartPanWheel, { passive: false, capture: true });
