@@ -273,6 +273,8 @@ html.ending-oauth-busy body::before {
 .ending-dev-page .ending-dev-limit__btn:focus-visible,
 .ending-dev-page .ending-dev-chart-mode__btn:focus-visible,
 .ending-dev-page .ending-dev-chart__jump:focus-visible,
+.ending-dev-page .ending-dev-chart__zoom-btn:focus-visible,
+.ending-dev-page .ending-dev-chart__zoom-range:focus-visible,
 .ending-dev-page .ending-dev-history__item:focus-visible,
 .ending-dev-page .ending-dev-history__select:focus-visible,
 .ending-dev-page .ending-dev-auto input:focus-visible,
@@ -1597,6 +1599,73 @@ html.ending-oauth-busy body::before {
   color: var(--dev-muted);
 }
 
+.ending-dev-chart__zoom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+  padding: 0.38rem 0.55rem;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, var(--dev-line) 88%, transparent);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.ending-dev-chart__zoom-label {
+  font-size: 0.68rem;
+  font-weight: 750;
+  color: var(--dev-muted);
+  letter-spacing: 0.02em;
+}
+
+.ending-dev-chart__zoom-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.65rem;
+  height: 1.65rem;
+  margin: 0;
+  padding: 0 0.35rem;
+  border-radius: 8px;
+  border: 1px solid var(--dev-line);
+  background: #fff;
+  color: var(--dev-ink);
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ending-dev-chart__zoom-btn:hover,
+.ending-dev-chart__zoom-btn:focus-visible {
+  border-color: color-mix(in srgb, var(--dev-blue) 45%, var(--dev-line));
+}
+
+.ending-dev-chart__zoom-btn--fit {
+  min-width: 0;
+  padding: 0 0.48rem;
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.ending-dev-chart__zoom-range {
+  flex: 1 1 7rem;
+  min-width: 5.5rem;
+  max-width: 12rem;
+  margin: 0;
+  accent-color: var(--dev-blue);
+}
+
+.ending-dev-chart__zoom-readout {
+  min-width: 2.4rem;
+  font-family: var(--dev-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--dev-muted);
+  text-align: right;
+}
+
 .ending-dev-chart__wrap {
   position: relative;
   width: 100%;
@@ -1733,6 +1802,12 @@ html.ending-oauth-busy body::before {
 .ending-dev-chart__grid {
   stroke: rgba(47, 95, 154, 0.12);
   stroke-width: 1;
+}
+
+.ending-dev-chart__grid-v {
+  stroke: rgba(47, 95, 154, 0.1);
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
 }
 
 .ending-dev-chart__ylabel,

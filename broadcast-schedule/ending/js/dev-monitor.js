@@ -46,6 +46,7 @@
   const DATA_TAB_KEY = "ending_dev_monitor_data_tab";
   const DATA_LIMIT_KEY = "ending_dev_monitor_data_limit";
   const METRICS_CHART_MODE_KEY = "ending_dev_monitor_metrics_chart_mode";
+  const CHART_ZOOM_STORAGE_KEY = "ending_dev_chart_zoom";
   const VIEW_KEY = "ending_dev_monitor_view";
   const SCROLL_STATE_KEY = "ending_dev_monitor_scroll";
   const METRICS_CHART_MODES = [
@@ -510,8 +511,148 @@
   const CHART_X_INSET = 6;
   const CHART_Y_INSET = 5;
   const CHART_MIN_PX_PER_POINT = 6;
+  const CHART_ZOOM_MIN = 1;
+  const CHART_ZOOM_MAX = 8;
+  const CHART_ZOOM_DEFAULT = 1;
   const CHART_PAD_SINGLE = { t: 18, r: 40, b: 30, l: 48 };
   const CHART_PAD_DUAL = { t: 18, r: 58, b: 30, l: 48 };
+
+  function chartZoomLevel() {
+    const stored = Number(sessionStorage.getItem(CHART_ZOOM_STORAGE_KEY));
+    if (Number.isFinite(stored) && stored >= CHART_ZOOM_MIN && stored <= CHART_ZOOM_MAX) {
+      return stored;
+    }
+    return CHART_ZOOM_DEFAULT;
+  }
+
+  function setChartZoomLevel(zoom) {
+    const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
+    try {
+      sessionStorage.setItem(CHART_ZOOM_STORAGE_KEY, String(z));
+    } catch (_) {
+      /* ignore */
+    }
+    if (!lastData) return;
+    const acc = resolveAccount(lastData, activeTab);
+    renderDataPanel(acc.sections, (acc.session || {}).collected || {});
+  }
+
+  function chartZoomSliderValue(zoom) {
+    const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
+    if (CHART_ZOOM_MAX <= CHART_ZOOM_MIN) return 0;
+    return Math.round(((z - CHART_ZOOM_MIN) / (CHART_ZOOM_MAX - CHART_ZOOM_MIN)) * 100);
+  }
+
+  function chartZoomFromSlider(value) {
+    const pct = Math.max(0, Math.min(100, Number(value) || 0)) / 100;
+    return CHART_ZOOM_MIN + pct * (CHART_ZOOM_MAX - CHART_ZOOM_MIN);
+  }
+
+  function chartZoomLabel(zoom) {
+    const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
+    if (z <= CHART_ZOOM_MIN + 0.001) return "전체";
+    return `${Math.round(z * 100)}%`;
+  }
+
+  function renderChartZoomControls() {
+    const zoom = chartZoomLevel();
+    const slider = chartZoomSliderValue(zoom);
+    return `<div class="ending-dev-chart__zoom" role="group" aria-label="그래프 가로 확대">
+      <span class="ending-dev-chart__zoom-label">가로</span>
+      <button type="button" class="ending-dev-chart__zoom-btn" data-chart-zoom="out" aria-label="축소">−</button>
+      <input type="range" class="ending-dev-chart__zoom-range" data-chart-zoom-range min="0" max="100" step="1" value="${slider}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${slider}" aria-label="그래프 가로 비율" />
+      <button type="button" class="ending-dev-chart__zoom-btn" data-chart-zoom="in" aria-label="확대">+</button>
+      <button type="button" class="ending-dev-chart__zoom-btn ending-dev-chart__zoom-btn--fit" data-chart-zoom="fit" aria-label="전체 보기">전체</button>
+      <span class="ending-dev-chart__zoom-readout" data-chart-zoom-readout>${esc(chartZoomLabel(zoom))}</span>
+    </div>`;
+  }
+
+  function chartTimeTickTimes(minMs, maxMs, chartWidthPx) {
+    const spanMs = Math.max(60_000, maxMs - minMs);
+    const intervals = [
+      5 * 60_000,
+      10 * 60_000,
+      15 * 60_000,
+      30 * 60_000,
+      60 * 60_000,
+      2 * 60 * 60_000,
+      3 * 60 * 60_000,
+      4 * 60 * 60_000,
+    ];
+    const minLabelGapPx = 54;
+    const maxTicks = Math.max(3, Math.floor(Math.max(120, chartWidthPx) / minLabelGapPx));
+    let intervalMs = intervals[intervals.length - 1];
+    for (const candidate of intervals) {
+      if (Math.ceil(spanMs / candidate) + 1 <= maxTicks) {
+        intervalMs = candidate;
+        break;
+      }
+    }
+    const times = [];
+    let t = Math.ceil(minMs / intervalMs) * intervalMs;
+    while (t <= maxMs + intervalMs * 0.05) {
+      times.push(t);
+      t += intervalMs;
+    }
+    if (!times.length || times[0] > minMs + spanMs * 0.015) {
+      times.unshift(minMs);
+    }
+    if (times[times.length - 1] < maxMs - spanMs * 0.015) {
+      times.push(maxMs);
+    }
+    const deduped = [];
+    for (const ms of times) {
+      if (!deduped.length || ms - deduped[deduped.length - 1] > spanMs * 0.02) {
+        deduped.push(ms);
+      }
+    }
+    return deduped;
+  }
+
+  function chartIndexTickIndices(count, chartWidthPx) {
+    const n = Math.max(1, Number(count) || 1);
+    if (n <= 1) return [0];
+    const minLabelGapPx = 54;
+    const maxTicks = Math.max(3, Math.floor(Math.max(120, chartWidthPx) / minLabelGapPx));
+    const step = Math.max(1, Math.ceil((n - 1) / Math.max(1, maxTicks - 1)));
+    const indices = [];
+    for (let i = 0; i < n; i += step) indices.push(i);
+    if (indices[indices.length - 1] !== n - 1) indices.push(n - 1);
+    return indices;
+  }
+
+  function renderChartTimeAxisDual(tickTimes, xAtTime, pad, w, h) {
+    const yGridBottom = pad.t + (h - pad.t - pad.b);
+    const yLabel = h - 8;
+    return tickTimes
+      .map((ms, i) => {
+        const at = new Date(ms).toISOString();
+        const x = xAtTime(at);
+        const anchor = i === 0 ? "start" : i === tickTimes.length - 1 ? "end" : "middle";
+        return `<line class="ending-dev-chart__grid-v" x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${yGridBottom.toFixed(1)}" />
+          <text class="ending-dev-chart__xlabel" x="${x.toFixed(1)}" y="${yLabel}" text-anchor="${anchor}">${esc(
+          chartClockLabel(at)
+        )}</text>`;
+      })
+      .join("");
+  }
+
+  function renderChartTimeAxisIndexed(points, xAt, pad, w, h) {
+    const innerW = w - pad.l - pad.r;
+    const indices = chartIndexTickIndices(points.length, innerW);
+    const yGridBottom = pad.t + (h - pad.t - pad.b);
+    const yLabel = h - 8;
+    return indices
+      .map((idx, i) => {
+        const x = xAt(idx);
+        const anchor = i === 0 ? "start" : i === indices.length - 1 ? "end" : "middle";
+        return `<line class="ending-dev-chart__grid-v" x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${yGridBottom.toFixed(1)}" />
+          <text class="ending-dev-chart__xlabel" x="${x.toFixed(1)}" y="${yLabel}" text-anchor="${anchor}">${esc(
+          chartClockLabel(points[idx].at)
+        )}</text>`;
+      })
+      .join("");
+  }
 
   function chartScaleMax(peak) {
     const p = Math.max(0, Number(peak) || 0);
@@ -519,13 +660,9 @@
     return Math.max(1, Math.ceil(p * (1 + CHART_HEADROOM)));
   }
 
-  function chartPixelWidth(count, pad, minW = CHART_W) {
-    const n = Math.max(1, Number(count) || 1);
-    const inner = Math.max(0, (n - 1) * CHART_MIN_PX_PER_POINT);
-    return Math.max(
-      minW,
-      Math.round((pad?.l || 0) + (pad?.r || 0) + CHART_X_INSET * 2 + inner)
-    );
+  function chartPixelWidth(_count, _pad, minW = CHART_W) {
+    const zoom = chartZoomLevel();
+    return Math.max(minW, Math.round(minW * zoom));
   }
 
   function chartAxisLayout(count, pad, w, h, maxV, opts = {}) {
@@ -1463,19 +1600,7 @@
           <text class="ending-dev-chart__ylabel" x="${pad.l - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${esc(fmtNum(v))}</text>`;
       })
       .join("");
-    const xIdx = [0, Math.floor((points.length - 1) / 2), points.length - 1].filter(
-      (v, i, arr) => arr.indexOf(v) === i
-    );
-    const xLabels = xIdx
-      .map((i) => {
-        const x = xAt(i).toFixed(1);
-        const anchor = i === 0 ? "start" : i === points.length - 1 ? "end" : "middle";
-        const dx = i === 0 ? 0 : i === points.length - 1 ? 0 : 0;
-        return `<text class="ending-dev-chart__xlabel" x="${x}" y="${h - 8}" text-anchor="${anchor}" dx="${dx}">${esc(
-          chartClockLabel(points[i].at)
-        )}</text>`;
-      })
-      .join("");
+    const xLabels = renderChartTimeAxisIndexed(points, xAt, pad, w, h);
     const lineColor = o.lineColor || "var(--dev-blue)";
     const areaColor = o.areaColor || "rgba(47, 95, 154, 0.12)";
     const meta = typeof o.meta === "function" ? o.meta(points, maxV) : String(o.meta || "");
@@ -1495,6 +1620,7 @@
     }
     return `<div class="ending-dev-chart">
       ${renderChartToolbar({ jumps, meta: typeof o.meta === "function" ? o.meta(points, maxV) : String(o.meta || "") })}
+      ${renderChartZoomControls()}
       <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
@@ -1594,20 +1720,8 @@
         return `<text class="ending-dev-chart__ylabel ending-dev-chart__ylabel--right" x="${w - pad.r + 8}" y="${y}" text-anchor="start" dominant-baseline="middle">${esc(fmtNum(v))}</text>`;
       })
       .join("");
-    const midMs = minMs + (maxMs - minMs) / 2;
-    const xLabelTimes = [
-      { at: new Date(minMs).toISOString(), anchor: "start" },
-      { at: new Date(midMs).toISOString(), anchor: "middle" },
-      { at: new Date(maxMs).toISOString(), anchor: "end" },
-    ];
-    const xLabels = xLabelTimes
-      .map(({ at, anchor }) => {
-        const x = xAtTime(at).toFixed(1);
-        return `<text class="ending-dev-chart__xlabel" x="${x}" y="${h - 8}" text-anchor="${anchor}">${esc(
-          chartClockLabel(at)
-        )}</text>`;
-      })
-      .join("");
+    const tickTimes = chartTimeTickTimes(minMs, maxMs, w - pad.l - pad.r);
+    const xLabels = renderChartTimeAxisDual(tickTimes, xAtTime, pad, w, h);
     const lastViewers = Number(counts?.lastViewerCount) || viewers[viewers.length - 1]?.v || 0;
     const viewerPeak = resolveViewerPeak(viewers, counts);
     const chatPeak = resolveChatPeak(chats);
@@ -1640,6 +1754,7 @@
     return {
       html: `<div class="ending-dev-chart ending-dev-chart--dual">
       ${renderChartToolbar({ jumps: [viewerPeak, chatPeak], meta, showLegend: true })}
+      ${renderChartZoomControls()}
       <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
@@ -2264,6 +2379,23 @@
     requestAnimationFrame(() => persistScrollState(captureScrollState(els.dataBody)));
   }
 
+  function onChartZoomAction(action, value) {
+    const act = String(action || "").trim();
+    if (act === "fit") {
+      setChartZoomLevel(CHART_ZOOM_DEFAULT);
+      return;
+    }
+    if (act === "in" || act === "out") {
+      const cur = chartZoomLevel();
+      const next = act === "in" ? cur * 1.25 : cur / 1.25;
+      setChartZoomLevel(next);
+      return;
+    }
+    if (act === "range") {
+      setChartZoomLevel(chartZoomFromSlider(value));
+    }
+  }
+
   function onChartModeClick(mode) {
     const next = String(mode || "").trim();
     if (!(next === "both" || next === "viewers" || next === "chat")) return;
@@ -2709,6 +2841,11 @@
     loadHistoryArchive(aid);
   });
   els.dataBody?.addEventListener("click", (ev) => {
+    const zoomBtn = ev.target?.closest?.("[data-chart-zoom]");
+    if (zoomBtn) {
+      onChartZoomAction(zoomBtn.getAttribute("data-chart-zoom"));
+      return;
+    }
     const modeBtn = ev.target?.closest?.("[data-chart-mode]");
     if (modeBtn) {
       onChartModeClick(modeBtn.getAttribute("data-chart-mode"));
@@ -2717,6 +2854,10 @@
     const btn = ev.target?.closest?.("[data-limit]");
     if (!btn) return;
     onDataLimitClick(btn.getAttribute("data-limit"));
+  });
+  els.dataBody?.addEventListener("change", (ev) => {
+    if (!ev.target?.matches?.("[data-chart-zoom-range]")) return;
+    onChartZoomAction("range", ev.target.value);
   });
   els.refresh?.addEventListener("click", () => refresh());
   els.auto?.addEventListener("change", () => schedule());
