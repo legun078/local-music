@@ -634,10 +634,11 @@
   }
 
   function formatBangonLabel(raw) {
-    const s = String(raw || "").trim();
+    let s = String(raw || "").trim();
     if (!s) return "";
-    if (/^뱅온\b/u.test(s)) return s;
-    return `뱅온 ${s}`;
+    s = s.replace(/^(?:뱅온\s*)+/u, "뱅온 ");
+    if (!s.startsWith("뱅온")) s = `뱅온 ${s}`;
+    return s.trim();
   }
 
   function renderNextDayItems(items) {
