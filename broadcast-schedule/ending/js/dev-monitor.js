@@ -864,12 +864,24 @@
   }
 
   function chartClientToSvg(svg, clientX, clientY, w, h) {
+    try {
+      const ctm = svg?.getScreenCTM?.();
+      if (ctm && typeof ctm.inverse === "function") {
+        const inv = ctm.inverse();
+        return {
+          x: inv.a * clientX + inv.c * clientY + inv.e,
+          y: inv.b * clientX + inv.d * clientY + inv.f,
+        };
+      }
+    } catch (_) {
+      /* fall through */
+    }
     const rect = svg?.getBoundingClientRect?.();
     if (!rect?.width) return { x: 0, y: 0 };
     const height = rect.height || 1;
     return {
-      x: ((clientX - rect.left) / rect.width) * w,
-      y: ((clientY - rect.top) / height) * h,
+      x: ((clientX - rect.left) / rect.width) * (Number(w) || rect.width),
+      y: ((clientY - rect.top) / height) * (Number(h) || height),
     };
   }
 
@@ -1135,7 +1147,7 @@
         ? config.formatValue
         : (v) => `${fmtNum(v)}${config.valueSuffix || ""}`;
 
-    function showHit(hit, { persist = true } = {}) {
+    function showHit(hit, { persist = true, pointerX = null } = {}) {
       if (String(wrap.dataset.chartToken) !== String(token) || !hit) return;
       const links = replayLinksForPoint(config.replay, hit.at);
       setChartTipHtml(
@@ -1144,13 +1156,17 @@
           links ? `<span class="ending-dev-chart__tip-sub">+ ${esc(links.offsetLabel)}</span>` : ""
         }`
       );
-      const x = hit.chartX;
+      const minX = pad.l + CHART_X_INSET;
+      const maxX = pad.l + CHART_X_INSET + xSpan;
+      const cursorX = Number.isFinite(Number(pointerX))
+        ? Math.max(minX, Math.min(maxX, Number(pointerX)))
+        : hit.chartX;
       if (cursor) {
-        showChartCursorLine(cursor, x, pad.t, pad.t + innerH);
+        showChartCursorLine(cursor, cursorX, pad.t, pad.t + innerH);
       }
       if (marker) {
         marker.hidden = false;
-        marker.setAttribute("cx", String(x));
+        marker.setAttribute("cx", String(hit.chartX));
         marker.setAttribute("cy", String(yAt(hit.v)));
         if (config.lineColor) {
           marker.style.stroke = config.lineColor;
@@ -1160,14 +1176,17 @@
       if (persist) chartPinnedAt = hit.at;
     }
 
-    function hitAtPointer(clientX, clientY) {
+    function pointerHit(clientX, clientY) {
       const pt = chartClientToSvg(svg, clientX, clientY, w, h);
-      return snapSeriesPointAtPointer(points, pt.x, pt.y, xAt, yAt, stickyPx);
+      return {
+        hit: snapSeriesPointAtPointer(points, pt.x, pt.y, xAt, yAt, stickyPx),
+        pointerX: pt.x,
+      };
     }
 
-    function pinHit(hit, { openTab = true } = {}) {
+    function pinHit(hit, { openTab = true, pointerX = null } = {}) {
       if (!hit) return;
-      showHit(hit);
+      showHit(hit, { pointerX });
       applyChartReplay(
         wrap,
         config.replay,
@@ -1194,10 +1213,12 @@
     }
 
     overlay.addEventListener("mousemove", (ev) => {
-      showHit(hitAtPointer(ev.clientX, ev.clientY));
+      const { hit, pointerX } = pointerHit(ev.clientX, ev.clientY);
+      showHit(hit, { pointerX });
     });
     overlay.addEventListener("click", (ev) => {
-      pinHit(hitAtPointer(ev.clientX, ev.clientY));
+      const { hit, pointerX } = pointerHit(ev.clientX, ev.clientY);
+      pinHit(hit, { pointerX });
     });
     wrap.addEventListener("ending-chart-jump", (ev) => {
       jumpToAt(ev.detail?.at);
@@ -1255,10 +1276,15 @@
       Math.max(0, w - pad.l - pad.r - CHART_X_INSET * 2)
     );
 
-    function showSnap(snap, { persist = true } = {}) {
+    function showSnap(snap, { persist = true, pointerX = null } = {}) {
       if (String(wrap.dataset.chartToken) !== String(token) || !snap) return;
       const snapAt = snap.at;
-      const x = xAtTime(snapAt);
+      const dataX = xAtTime(snapAt);
+      const minX = pad.l + CHART_X_INSET;
+      const maxX = w - pad.r - CHART_X_INSET;
+      const cursorX = Number.isFinite(Number(pointerX))
+        ? Math.max(minX, Math.min(maxX, Number(pointerX)))
+        : dataX;
       const viewerV = snap.viewers;
       const chatV = snap.chats;
       const links = replayLinksForPoint(config.replay, snapAt);
@@ -1280,12 +1306,12 @@
         }`
       );
       if (cursor) {
-        showChartCursorLine(cursor, x, pad.t, pad.t + innerH);
+        showChartCursorLine(cursor, cursorX, pad.t, pad.t + innerH);
       }
       if (markerViewers) {
         if (viewerV != null && Number.isFinite(Number(viewerV))) {
           markerViewers.hidden = false;
-          markerViewers.setAttribute("cx", String(x));
+          markerViewers.setAttribute("cx", String(dataX));
           markerViewers.setAttribute("cy", String(yViewers(viewerV)));
         } else {
           markerViewers.hidden = true;
@@ -1294,7 +1320,7 @@
       if (markerChats) {
         if (chatV != null && Number.isFinite(Number(chatV))) {
           markerChats.hidden = false;
-          markerChats.setAttribute("cx", String(x));
+          markerChats.setAttribute("cx", String(dataX));
           markerChats.setAttribute("cy", String(yChats(chatV)));
         } else {
           markerChats.hidden = true;
@@ -1304,24 +1330,27 @@
       if (persist) chartPinnedAt = snapAt;
     }
 
-    function snapAtPointer(clientX, clientY) {
+    function pointerSnap(clientX, clientY) {
       const pt = chartClientToSvg(svg, clientX, clientY, w, h);
       const hoverMs = chartXToTimeMs(pt.x, pad, w, minMs, maxMs);
-      return snapMergedPointAtPointer(
-        merged,
-        pt.x,
-        pt.y,
-        xAtTime,
-        yViewers,
-        yChats,
-        stickyPx,
-        hoverMs
-      );
+      return {
+        snap: snapMergedPointAtPointer(
+          merged,
+          pt.x,
+          pt.y,
+          xAtTime,
+          yViewers,
+          yChats,
+          stickyPx,
+          hoverMs
+        ),
+        pointerX: pt.x,
+      };
     }
 
-    function pinSnap(snap, { openTab = true } = {}) {
+    function pinSnap(snap, { openTab = true, pointerX = null } = {}) {
       if (!snap) return;
-      showSnap(snap);
+      showSnap(snap, { pointerX });
       applyChartReplay(
         wrap,
         config.replay,
@@ -1346,10 +1375,12 @@
     }
 
     overlay.addEventListener("mousemove", (ev) => {
-      showSnap(snapAtPointer(ev.clientX, ev.clientY));
+      const { snap, pointerX } = pointerSnap(ev.clientX, ev.clientY);
+      showSnap(snap, { pointerX });
     });
     overlay.addEventListener("click", (ev) => {
-      pinSnap(snapAtPointer(ev.clientX, ev.clientY));
+      const { snap, pointerX } = pointerSnap(ev.clientX, ev.clientY);
+      pinSnap(snap, { pointerX });
     });
     wrap.addEventListener("ending-chart-jump", (ev) => {
       jumpToAt(ev.detail?.at);

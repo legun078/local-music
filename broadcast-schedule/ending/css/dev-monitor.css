@@ -1313,11 +1313,11 @@
   position: relative;
   width: 100%;
   overflow: visible;
-  padding-right: 0.15rem;
+  padding-right: 0;
 }
 
 .ending-dev-chart--dual .ending-dev-chart__wrap {
-  padding-right: 0.35rem;
+  padding-right: 0;
 }
 
 .ending-dev-chart__svg {
@@ -1325,11 +1325,15 @@
   height: auto;
   display: block;
   overflow: visible;
+  pointer-events: none;
 }
 
 .ending-dev-chart__overlay {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
   cursor: crosshair;
 }
 
