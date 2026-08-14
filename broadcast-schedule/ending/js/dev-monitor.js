@@ -508,6 +508,10 @@
 
   const CHART_W = 680;
   const CHART_H = 176;
+  const CHART_W_MIN = 320;
+  let activeChartLayoutWidth = CHART_W;
+  let chartLayoutWidthCache = CHART_W;
+  let chartLayoutRerenderTimer = null;
   const CHART_HEADROOM = 0.12;
   const CHART_X_INSET = 6;
   const CHART_Y_INSET = 5;
@@ -647,8 +651,37 @@
     return Number(zoom) <= CHART_ZOOM_MIN + 0.001;
   }
 
-  function chartLogicalWidth() {
+  function chartLayoutWidth(rootEl) {
+    const root = rootEl || els.dataBody;
+    if (!root) return CHART_W;
+    const viewport = root.querySelector?.(".ending-dev-chart__viewport");
+    if (viewport?.clientWidth >= CHART_W_MIN) return Math.round(viewport.clientWidth);
+    const digest = root.querySelector?.(".ending-dev-digest");
+    if (digest?.clientWidth >= CHART_W_MIN) return Math.round(digest.clientWidth);
+    const overview = root.querySelector?.(".ending-dev-overview-panel");
+    if (overview?.clientWidth >= CHART_W_MIN) return Math.round(overview.clientWidth);
+    const panel = root.querySelector?.(".ending-dev-data-panel");
+    if (panel?.clientWidth >= CHART_W_MIN) return Math.round(panel.clientWidth - 32);
+    if (root.clientWidth >= CHART_W_MIN) return Math.round(root.clientWidth - 32);
     return CHART_W;
+  }
+
+  function scheduleChartLayoutRerender() {
+    clearTimeout(chartLayoutRerenderTimer);
+    chartLayoutRerenderTimer = setTimeout(() => {
+      if (!lastData || !els.dataBody) return;
+      const nextW = chartLayoutWidth(els.dataBody);
+      if (Math.abs(nextW - chartLayoutWidthCache) < 8) return;
+      chartLayoutWidthCache = nextW;
+      activeChartLayoutWidth = nextW;
+      scrollRestorePending = captureScrollState(els.dataBody);
+      const acc = resolveAccount(lastData, activeTab);
+      renderDataPanel(acc.sections, (acc.session || {}).collected || {});
+    }, 120);
+  }
+
+  function chartLogicalWidth() {
+    return activeChartLayoutWidth || CHART_W;
   }
 
   function renderChartZoomControls() {
@@ -1740,7 +1773,7 @@
     }
     const h = CHART_H;
     const pad = CHART_PAD_SINGLE;
-    const w = CHART_W;
+    const w = chartLogicalWidth();
     const timeRange = chartTimeRangeFromPoints(points);
     if (!timeRange) {
       return `<p class="ending-dev-empty ending-dev-data-empty">${esc(emptyMsg)}</p>`;
@@ -1800,7 +1833,7 @@
       </div>
       <div class="ending-dev-chart__viewport">
       <div class="ending-dev-chart__wrap" data-chart-wrap
-        data-chart-width="${CHART_W}" data-chart-height="${h}"
+        data-chart-width="${w}" data-chart-height="${h}"
         data-chart-full-min="${fullMinMs}" data-chart-full-max="${fullMaxMs}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
         <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${esc(o.ariaLabel || "추이")}">
@@ -1874,7 +1907,7 @@
     const { minMs: fullMinMs, maxMs: fullMaxMs } = timeRange;
     const win = chartVisibleWindow(fullMinMs, fullMaxMs);
     const { viewMinMs, viewMaxMs } = win;
-    const w = CHART_W;
+    const w = chartLogicalWidth();
     const maxViewers = chartScaleMax(Math.max(...viewers.map((p) => p.v), 0));
     const maxChats = chartScaleMax(Math.max(...chats.map((p) => p.v), 0));
     const { innerH, xAtTime, yViewers, yChats } = chartDualTimeLayout(
@@ -1945,7 +1978,7 @@
       </div>
       <div class="ending-dev-chart__viewport">
       <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1"
-        data-chart-width="${CHART_W}" data-chart-height="${h}"
+        data-chart-width="${w}" data-chart-height="${h}"
         data-chart-full-min="${fullMinMs}" data-chart-full-max="${fullMaxMs}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
         <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="시청자·채팅 화력 추이">
@@ -1973,7 +2006,7 @@
         viewerPoints: viewers,
         chatPoints: chats,
         replay,
-        width: CHART_W,
+        width: w,
         height: h,
         pad,
         minMs: viewMinMs,
@@ -2553,6 +2586,9 @@
     const scrollState = scrollRestorePending || captureScrollState(els.dataBody);
     scrollRestorePending = null;
 
+    activeChartLayoutWidth = chartLayoutWidth(els.dataBody);
+    chartLayoutWidthCache = activeChartLayoutWidth;
+
     const overview = renderOverviewPanel(cats, collected);
     els.dataBody.innerHTML = overview.html;
     if (overview.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, overview.bind);
@@ -2561,6 +2597,15 @@
     syncChartPanScroll(els.dataBody);
     restoreScrollState(els.dataBody, scrollState);
     requestAnimationFrame(() => {
+      const fittedW = chartLayoutWidth(els.dataBody);
+      if (Math.abs(fittedW - activeChartLayoutWidth) >= 8 && lastData) {
+        activeChartLayoutWidth = fittedW;
+        chartLayoutWidthCache = fittedW;
+        scrollRestorePending = scrollState;
+        const acc = resolveAccount(lastData, activeTab);
+        renderDataPanel(acc.sections, (acc.session || {}).collected || {});
+        return;
+      }
       syncChartPanScroll(els.dataBody);
       restoreScrollState(els.dataBody, scrollState);
       persistScrollState(captureScrollState(els.dataBody));
@@ -3056,6 +3101,7 @@
     () => {
       if (!els.dataBody) return;
       syncChartPanScroll(els.dataBody);
+      scheduleChartLayoutRerender();
     },
     { passive: true }
   );
