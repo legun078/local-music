@@ -1003,8 +1003,13 @@ html.ending-oauth-busy body::before {
   padding: 0.3rem 0.25rem;
 }
 
+html:has(body.ending-dev-page) {
+  scrollbar-gutter: stable;
+}
+
 body.ending-dev-modal-open {
   overflow: hidden;
+  touch-action: none;
 }
 
 .ending-dev-overview-card__body {

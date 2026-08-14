@@ -3034,6 +3034,38 @@
     return cat;
   }
 
+  function bodyScrollbarGap() {
+    return Math.max(0, window.innerWidth - document.documentElement.clientWidth);
+  }
+
+  function lockPageScrollForModal() {
+    if (document.body.classList.contains("ending-dev-modal-open")) return;
+    const scrollY = window.scrollY || window.pageYOffset || 0;
+    const gap = bodyScrollbarGap();
+    document.body.dataset.modalScrollY = String(scrollY);
+    document.body.classList.add("ending-dev-modal-open");
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
+    document.body.style.width = "100%";
+    if (gap > 0) document.body.style.paddingRight = `${gap}px`;
+  }
+
+  function unlockPageScrollForModal() {
+    if (!document.body.classList.contains("ending-dev-modal-open")) return;
+    const scrollY = Number(document.body.dataset.modalScrollY || 0);
+    document.body.classList.remove("ending-dev-modal-open");
+    document.body.style.position = "";
+    document.body.style.top = "";
+    document.body.style.left = "";
+    document.body.style.right = "";
+    document.body.style.width = "";
+    document.body.style.paddingRight = "";
+    delete document.body.dataset.modalScrollY;
+    window.scrollTo(0, Number.isFinite(scrollY) ? scrollY : 0);
+  }
+
   function ensureCategoryListModal() {
     if (categoryModalEl) return categoryModalEl;
     const root = document.createElement("div");
@@ -3068,14 +3100,14 @@
     if (bodyEl) bodyEl.innerHTML = renderOverviewCategoryBody(cat, 0);
     modal.hidden = false;
     modal.classList.remove("hidden");
-    document.body.classList.add("ending-dev-modal-open");
+    lockPageScrollForModal();
   }
 
   function closeCategoryListModal() {
     if (!categoryModalEl) return;
     categoryModalEl.hidden = true;
     categoryModalEl.classList.add("hidden");
-    document.body.classList.remove("ending-dev-modal-open");
+    unlockPageScrollForModal();
   }
 
   function renderChartModeToggles(mode) {
