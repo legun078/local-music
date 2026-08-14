@@ -2238,6 +2238,57 @@ def format_duration(started_at: str | None, ended_at: str | None = None) -> str:
     return " ".join(parts)
 
 
+_MAX_PLAUSIBLE_SESSION_SEC = 14 * 3600
+
+
+def _latest_metric_at(session: dict[str, Any]) -> datetime | None:
+    ms = session.get("metricsSeries") if isinstance(session.get("metricsSeries"), dict) else {}
+    latest: datetime | None = None
+    for key in ("viewers", "chats", "up", "balloons"):
+        rows = ms.get(key) if isinstance(ms.get(key), list) else []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            at = parse_iso(row.get("at"))
+            if at and (latest is None or at > latest):
+                latest = at
+    return latest
+
+
+def session_metrics_end_at(session: dict[str, Any] | None) -> str | None:
+    """차트·길이 계산용 세션 종료 시각.
+
+    endedAt이 없거나 updatedAt이 다음 방송까지 밀린 경우, metrics/피크 시각으로 보정한다.
+    """
+    if not isinstance(session, dict):
+        return None
+    started = parse_iso(session.get("startedAt"))
+    if not started:
+        return None
+
+    ended = parse_iso(session.get("endedAt"))
+    if ended and ended >= started:
+        return str(session.get("endedAt") or "").strip() or None
+
+    latest = _latest_metric_at(session)
+    if latest and latest >= started:
+        return _iso_z(latest)
+
+    peak_at = parse_iso(session.get("peakViewersAt"))
+    if peak_at and peak_at >= started:
+        return _iso_z(peak_at)
+
+    updated = parse_iso(session.get("updatedAt"))
+    if updated and updated >= started:
+        span = (updated - started).total_seconds()
+        if span <= _MAX_PLAUSIBLE_SESSION_SEC:
+            return str(session.get("updatedAt") or "").strip() or None
+
+    if latest and latest >= started:
+        return _iso_z(latest)
+    return None
+
+
 def format_watch(ms_or_sec: float, *, seconds_input: bool = False) -> str:
     total = int(ms_or_sec if seconds_input else ms_or_sec / 1000)
     total = max(0, total)
@@ -4482,11 +4533,11 @@ class CreditsStore:
             "archivedAt": utc_now_iso(),
             "stationId": str(session.get("stationId") or "").strip(),
             "startedAt": session.get("startedAt"),
-            "endedAt": session.get("endedAt"),
+            "endedAt": session.get("endedAt") or session_metrics_end_at(session),
             "title": str(session.get("title") or "").strip(),
             "peakViewers": int(session.get("peakViewers") or 0),
             "peakThumbFile": peak_name,
-            "session": session,
+            "session": {**session, "active": False},
             "credits": credits,
         }
         self._write_json(json_path, payload)
@@ -4706,17 +4757,24 @@ class CreditsStore:
             sid = stem.split("_", 1)[-1].strip().lower()
         credits = data.get("credits") if isinstance(data.get("credits"), dict) else {}
         info = credits.get("info") if isinstance(credits.get("info"), dict) else {}
+        sess = data.get("session") if isinstance(data.get("session"), dict) else {}
         start_day = self._archive_start_date(data, folder_name=folder_name) or folder_name
+        end_at = data.get("endedAt") or sess.get("endedAt") or session_metrics_end_at(sess)
+        duration_label = str(info.get("durationLabel") or "").strip()
+        if not duration_label or not data.get("endedAt"):
+            recomputed = format_duration(data.get("startedAt") or sess.get("startedAt"), end_at)
+            if recomputed:
+                duration_label = recomputed
         return {
             "archiveId": aid,
             "date": start_day,
             "stationId": sid or data.get("stationId") or "",
             "startedAt": data.get("startedAt"),
-            "endedAt": data.get("endedAt"),
+            "endedAt": end_at,
             "title": data.get("title") or info.get("title") or "",
             "peakViewers": int(data.get("peakViewers") or info.get("peakViewers") or 0),
             "peakAtLabel": str(info.get("peakAtLabel") or "").strip(),
-            "durationLabel": str(info.get("durationLabel") or "").strip(),
+            "durationLabel": duration_label,
             "chatters": int(info.get("chatters") or 0),
             "chatCount": int(info.get("chatCount") or 0),
             "balloonTotal": int(
@@ -5314,7 +5372,10 @@ class CreditsStore:
         chat_count = sum(int(i["count"]) for i in chat_items)
         title = str(session.get("title") or "").strip() or "오늘의 방송"
         active = bool(session.get("active"))
-        duration = format_duration(session.get("startedAt"), None if active else session.get("endedAt"))
+        end_at = session.get("endedAt") if not active else None
+        if not end_at:
+            end_at = session_metrics_end_at(session)
+        duration = format_duration(session.get("startedAt"), end_at)
 
         first = session.get("firstChat") if isinstance(session.get("firstChat"), dict) else None
         first_out = None

@@ -40,6 +40,7 @@ from credits_store import (
     build_demo_credits_payload,
     coalesce_session_user_aliases,
     collector_segments_for_monitor,
+    format_duration,
     format_kst_clock,
     format_watch,
     chatter_watch_ms,
@@ -49,6 +50,7 @@ from credits_store import (
     serialize_donation_notes,
     serialize_mission_runs,
     serialize_ssapi_assist,
+    session_metrics_end_at,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -959,7 +961,7 @@ def _metrics_series_readonly_preview(session: dict) -> dict[str, list[dict[str, 
         viewers,
         chats,
         started_at=str(session.get("startedAt") or ""),
-        end_at=str(session.get("updatedAt") or "") or None,
+        end_at=session_metrics_end_at(session),
     )
     aligned_v = apply_peak_viewers_to_series(
         aligned_v,
@@ -1322,6 +1324,12 @@ def _archive_monitor_payload(store: CreditsStore, archive_id: str) -> dict[str, 
     if not isinstance(data, dict):
         return None
     session = data.get("session") if isinstance(data.get("session"), dict) else {}
+    session = dict(session)
+    session["active"] = False
+    if not session.get("endedAt"):
+        inferred = session_metrics_end_at(session)
+        if inferred:
+            session["endedAt"] = inferred
     credits = data.get("credits") if isinstance(data.get("credits"), dict) else None
     if credits is None:
         try:
@@ -1338,6 +1346,12 @@ def _archive_monitor_payload(store: CreditsStore, archive_id: str) -> dict[str, 
 
         info["peakThumbUrl"] = f"/api/credits/archive-peak-thumb?archiveId={quote(aid)}"
         summary["peakThumbUrl"] = info["peakThumbUrl"]
+    duration_label = str(info.get("durationLabel") or "").strip()
+    if not duration_label:
+        duration_label = format_duration(
+            data.get("startedAt") or session.get("startedAt"),
+            data.get("endedAt") or session.get("endedAt") or session_metrics_end_at(session),
+        )
     return {
         "ok": True,
         "archiveId": aid,
@@ -1347,9 +1361,9 @@ def _archive_monitor_payload(store: CreditsStore, archive_id: str) -> dict[str, 
         "info": info,
         "sections": preview.get("sections") or [],
         "startedAt": data.get("startedAt") or session.get("startedAt"),
-        "endedAt": data.get("endedAt") or session.get("endedAt"),
+        "endedAt": data.get("endedAt") or session.get("endedAt") or session_metrics_end_at(session),
         "title": data.get("title") or info.get("title") or "",
-        "durationLabel": str(info.get("durationLabel") or ""),
+        "durationLabel": duration_label,
         "peakViewers": int(data.get("peakViewers") or info.get("peakViewers") or 0),
         "balloonTotal": int(info.get("balloonTotal") or session.get("balloonTotal") or 0),
     }
