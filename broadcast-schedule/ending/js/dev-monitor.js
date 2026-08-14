@@ -1098,7 +1098,10 @@
     const atMs = parseChartDate(at)?.getTime();
     if (!startMs || !atMs) return null;
     const rawOffsetSec = Math.max(0, Math.floor((atMs - startMs) / 1000));
-    const offsetSec = Math.max(0, rawOffsetSec - REPLAY_SEEK_LEAD_SEC);
+    const replayOffsetSec = Number(ctx?.replayOffsetSec);
+    const offsetAdjust = Number.isFinite(replayOffsetSec) ? replayOffsetSec : 0;
+    const vodRawSec = Math.max(0, rawOffsetSec + offsetAdjust);
+    const offsetSec = Math.max(0, vodRawSec - REPLAY_SEEK_LEAD_SEC);
     const offsetLabel = formatOffsetSec(offsetSec);
     if (ctx.active && broadNo) {
       return {

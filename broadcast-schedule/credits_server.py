@@ -28,6 +28,7 @@ from credits_ingest_activity import get_ingest_activity_store
 from credits_overlay import OverlayConfigStore
 from credits_obs_link import ObsLinkStore
 from credits_schedule import build_next_day_schedule
+from credits_vod_replay import build_replay_context
 from credits_store import (
     CreditsStore,
     apply_signature_amounts_to_payload,
@@ -971,20 +972,7 @@ def _metrics_series_readonly_preview(session: dict) -> dict[str, list[dict[str, 
 
 
 def _dev_monitor_replay_context(session: dict) -> dict[str, Any]:
-    sid = str(session.get("stationId") or "").strip().lower()
-    broad_no = str(session.get("broadNo") or "").strip()
-    active = bool(session.get("active"))
-    vod_title_no = str(session.get("vodTitleNo") or "").strip()
-    if not vod_title_no and not active and sid and broad_no:
-        vod_title_no = fetch_vod_title_no_for_broad(sid, broad_no)
-    return {
-        "stationId": sid,
-        "broadNo": broad_no,
-        "vodTitleNo": vod_title_no,
-        "startedAt": str(session.get("startedAt") or ""),
-        "endedAt": str(session.get("endedAt") or ""),
-        "active": active,
-    }
+    return build_replay_context(session, raw_dir=CREDITS_RAW_DIR)
 
 
 def _title_history_preview(session: dict) -> list[dict[str, Any]]:
