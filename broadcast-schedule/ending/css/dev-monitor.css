@@ -1679,6 +1679,7 @@ html.ending-oauth-busy body::before {
   height: 176px;
   overflow: visible;
   padding-right: 0;
+  will-change: transform;
 }
 
 .ending-dev-chart__pan-scroll {

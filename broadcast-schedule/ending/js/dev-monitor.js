@@ -563,10 +563,8 @@
         }
       }
     }
-    chartPanWheelPending = null;
     if (!lastData) return;
-    const acc = resolveAccount(lastData, activeTab);
-    renderDataPanel(acc.sections, (acc.session || {}).collected || {});
+    refreshMetricsChartView();
   }
 
   function chartPanLevel() {
@@ -583,8 +581,7 @@
       /* ignore */
     }
     if (!rerender || !lastData) return;
-    const acc = resolveAccount(lastData, activeTab);
-    renderDataPanel(acc.sections, (acc.session || {}).collected || {});
+    refreshMetricsChartView();
   }
 
   /** zoom·pan에 맞춰 X축에 그릴 시간 구간(전체 타임라인 대비). */
@@ -627,6 +624,7 @@
       if (chartIsFitZoom()) {
         scroller.hidden = true;
         scroller.scrollLeft = 0;
+        clearChartPanSlide(scroller.closest(".ending-dev-chart"));
         return;
       }
       scroller.hidden = false;
@@ -635,12 +633,55 @@
       if (spacer) spacer.style.width = `${zoom * 100}%`;
       const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
       scroller.scrollLeft = Math.round(chartPanLevel() * max);
+      clearChartPanSlide(scroller.closest(".ending-dev-chart"));
     });
   }
 
+  function chartPanScrollerMetrics(scroller) {
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    return {
+      max,
+      committedLeft: Math.round(chartPanLevel() * max),
+    };
+  }
+
+  function clearChartPanSlide(scope) {
+    if (!scope) return;
+    const wraps = scope.matches?.("[data-chart-wrap]")
+      ? [scope]
+      : [...(scope.querySelectorAll?.("[data-chart-wrap]") || [])];
+    wraps.forEach((wrap) => {
+      wrap.style.transition = "";
+      wrap.style.transform = "";
+    });
+  }
+
+  function updateChartPanSlide(scroller) {
+    const chart = scroller?.closest?.(".ending-dev-chart");
+    const wrap = chart?.querySelector?.("[data-chart-wrap]");
+    if (!wrap) return;
+    const { committedLeft } = chartPanScrollerMetrics(scroller);
+    const slidePx = scroller.scrollLeft - committedLeft;
+    if (Math.abs(slidePx) < 0.5) {
+      wrap.style.transition = "";
+      wrap.style.transform = "";
+      return;
+    }
+    wrap.style.transition = "none";
+    wrap.style.transform = `translate3d(${-slidePx}px, 0, 0)`;
+  }
+
+  function commitChartPanFromScroller(scroller) {
+    if (!scroller) return;
+    const { max } = chartPanScrollerMetrics(scroller);
+    const pan = max > 0 ? scroller.scrollLeft / max : 0;
+    const cur = chartPanLevel();
+    clearChartPanSlide(scroller.closest(".ending-dev-chart"));
+    if (Math.abs(cur - pan) < 0.002) return;
+    setChartPanLevel(pan);
+  }
+
   let chartPanScrollTimer = null;
-  let chartPanWheelTimer = null;
-  let chartPanWheelPending = null;
 
   function chartActiveFullTimeRange() {
     const wrap = els.dataBody?.querySelector?.("[data-chart-wrap]");
@@ -678,32 +719,15 @@
     return dx;
   }
 
-  function chartPanScrollMaxPx(viewportWidth) {
-    const zoom = chartZoomLevel();
-    if (zoom <= CHART_ZOOM_MIN + 0.001) return 0;
-    return Math.max(0, viewportWidth * (zoom - 1));
-  }
-
-  function scheduleChartPanFromWheel(wrap, deltaPx, viewportWidth) {
+  function scheduleChartPanFromWheel(wrap, deltaPx) {
     if (!wrap || chartIsFitZoom()) return;
-    const maxScroll = chartPanScrollMaxPx(viewportWidth);
-    if (maxScroll <= 0) return;
-    const base = chartPanWheelPending ?? chartPanLevel();
-    chartPanWheelPending = Math.max(0, Math.min(1, base + deltaPx / maxScroll));
     const chart = wrap.closest(".ending-dev-chart");
     const scroller = chart?.querySelector?.("[data-chart-pan-scroll]");
-    if (scroller) {
-      const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-      scroller.scrollLeft = Math.round(chartPanWheelPending * max);
-    }
-    clearTimeout(chartPanWheelTimer);
-    chartPanWheelTimer = setTimeout(() => {
-      const pan = chartPanWheelPending;
-      chartPanWheelPending = null;
-      if (pan == null) return;
-      if (Math.abs(pan - chartPanLevel()) < 0.002) return;
-      setChartPanLevel(pan);
-    }, 60);
+    if (!scroller) return;
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    if (max <= 0) return;
+    scroller.scrollLeft = Math.max(0, Math.min(max, scroller.scrollLeft + deltaPx));
+    scheduleChartPanFromScroll(scroller);
   }
 
   function onChartPanWheel(ev) {
@@ -716,18 +740,14 @@
     const dx = chartPanWheelDelta(ev);
     if (Math.abs(dx) < 0.5) return;
     ev.preventDefault();
-    scheduleChartPanFromWheel(wrap, dx, viewport.clientWidth);
+    scheduleChartPanFromWheel(wrap, dx);
   }
+
   function scheduleChartPanFromScroll(scroller) {
     if (!scroller) return;
+    updateChartPanSlide(scroller);
     clearTimeout(chartPanScrollTimer);
-    chartPanScrollTimer = setTimeout(() => {
-      const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-      const pan = max > 0 ? scroller.scrollLeft / max : 0;
-      const cur = chartPanLevel();
-      if (Math.abs(cur - pan) < 0.002) return;
-      setChartPanLevel(pan);
-    }, 80);
+    chartPanScrollTimer = setTimeout(() => commitChartPanFromScroller(scroller), 140);
   }
 
   function chartZoomSliderValue(zoom) {
@@ -1681,7 +1701,7 @@
     const labels = rows
       .map((row, i) => {
         const y = boxY + padY + 9 + i * lineH;
-        return `<text class="ending-dev-chart__peak-combo-line ending-dev-chart__peak-combo-line--${esc(row.kind)}" x="${anchorX.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle">${esc(row.text)}</text>`;
+        return `<text class="ending-dev-chart__peak-combo-line ending-dev-chart__peak-combo-line--${row.kind}" x="${anchorX.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle">${esc(row.text)}</text>`;
       })
       .join("");
     return `<g class="ending-dev-chart__peak-combo" pointer-events="none">
@@ -2356,6 +2376,39 @@
       return renderChatChartPanel(metricsSeries, counts, replay);
     }
     return renderDualMetricChartPanel(viewerPoints, chatPoints, counts, replay);
+  }
+
+  function metricsChartContext(collected) {
+    const c = collected || {};
+    const extras = devLiveExtras(c);
+    const metricsCat = (dataCatsCache || []).find((cat) => cat.id === "metricsChart") || {};
+    return {
+      metricsSeries: metricsCat.metricsSeries || extras?.metricsSeries || {},
+      counts: metricsCat.counts || c.counts || {},
+      replay: extras?.replay || {},
+    };
+  }
+
+  function refreshMetricsChartView() {
+    if (!lastData || !els.dataBody) return false;
+    const acc = resolveAccount(lastData, activeTab);
+    const collected = (acc.session || {}).collected || {};
+    const ctx = metricsChartContext(collected);
+    const chart = renderMetricsChartPanel(ctx.metricsSeries, ctx.counts, ctx.replay, metricsChartMode);
+    const oldChart = els.dataBody.querySelector(".ending-dev-chart");
+    if (!oldChart || !chart?.html) {
+      renderDataPanel(acc.sections, collected);
+      return true;
+    }
+    const holder = document.createElement("div");
+    holder.innerHTML = chart.html;
+    const newChart = holder.firstElementChild;
+    if (!newChart) return false;
+    oldChart.replaceWith(newChart);
+    if (chart.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, chart.bind);
+    else if (chart.bind) mountMetricChartInteraction(els.dataBody, chart.bind);
+    syncChartPanScroll(els.dataBody);
+    return true;
   }
 
   function devLiveExtras(collected) {
