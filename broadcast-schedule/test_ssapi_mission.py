@@ -287,16 +287,21 @@ class SsapiMissionTests(unittest.TestCase):
         self.assertEqual(assist["donationCount"], 1)
         self.assertEqual(assist["donations"][0]["text"], "밤양갱 신청이요")
 
-    def test_empty_donation_message_is_ignored(self) -> None:
+    def test_empty_donation_message_feed_only(self) -> None:
         session = self._session()
         self.assertIsNone(
             apply_ssapi_donation(
                 session,
-                {"user_id": "donor1", "nickname": "후원자", "cnt": 10, "message": ""},
+                {"_id": "ssapi-empty", "user_id": "donor1", "nickname": "후원자", "cnt": 10, "message": ""},
                 ts="2026-08-13T12:21:00Z",
             )
         )
         self.assertEqual(serialize_donation_notes(session), [])
+        assist = serialize_ssapi_assist(session)
+        self.assertEqual(assist["donationCount"], 1)
+        self.assertEqual(assist["donations"][0]["name"], "후원자")
+        self.assertEqual(assist["donations"][0]["count"], 10)
+        self.assertEqual(assist["donations"][0]["text"], "")
 
     def test_sdk_donation_text_is_kept_if_present(self) -> None:
         self.store.ingest_events(

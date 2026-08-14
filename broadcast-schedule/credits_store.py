@@ -1518,17 +1518,17 @@ def apply_ssapi_donation(
     *,
     ts: str = "",
 ) -> dict[str, Any] | None:
-    """SSAPI 별풍 메시지 보조. 후원 수량은 더하지 않는다."""
+    """SSAPI 별풍 이벤트 보조. 후원 수량은 더하지 않고, 메시지·피드만 남긴다."""
     msg = payload if isinstance(payload, dict) else {}
     text = _donation_text_from_msg(msg)
-    if not text:
-        return None
     try:
         count = int(msg.get("cnt") or msg.get("count") or 0)
     except (TypeError, ValueError):
         count = 0
     uid = str(msg.get("user_id") or msg.get("userId") or "").strip()
     name = str(msg.get("nickname") or msg.get("userNickname") or "").strip()
+    if not uid and not name and count <= 0 and not text:
+        return None
     at = ts or utc_now_iso()
     note_ssapi_feed(
         session,
@@ -1541,6 +1541,8 @@ def apply_ssapi_donation(
         text=text,
         note_id=str(msg.get("_id") or msg.get("id") or "").strip(),
     )
+    if not text:
+        return None
     return note_donation_text(
         session,
         user_id=uid,

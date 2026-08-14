@@ -263,8 +263,8 @@ def run_socket(api_key: str) -> None:
             return
         if not _wanted_streamer(payload):
             return
-        if not str(payload.get("message") or payload.get("comment") or payload.get("text") or "").strip():
-            return
+        # SSAPI 예시처럼 message가 빈 별풍도 많다. 대시보드·소켓에는 오지만
+        # 예전엔 여기서 버려서 개발자 모니터 SSAPI 탭이 0으로 보였다.
         ingest_event("SSAPI_DONATION", payload)
 
     @sio.event

@@ -786,9 +786,10 @@
   function renderSsapiStatus(ssapi) {
     const on = Boolean(ssapi?.connected);
     const err = String(ssapi?.lastError || "").trim();
+    const ingested = Boolean(ssapi?.lastIngestAt) || Number(ssapi?.eventCount) > 0;
     const when = ssapi?.lastIngestAt || ssapi?.updatedAt || "";
     const bits = [
-      on ? "소켓 연결" : err ? `끊김 · ${err}` : "대기",
+      on ? (ingested ? "소켓 연결 · 수신 중" : "소켓 연결 · 수신 없음") : err ? `끊김 · ${err}` : "대기",
       ssapi?.stationId ? `채널 ${ssapi.stationId}` : "",
       when ? chartClockLabel(when) : "",
       ssapi?.lastTitle ? ssapi.lastTitle : "",
@@ -832,18 +833,21 @@
   function renderSsapiDonationList(rows) {
     const list = Array.isArray(rows) ? rows : [];
     if (!list.length) {
-      return `<p class="ending-dev-empty ending-dev-data-empty">별풍 메시지 없음</p>`;
+      return `<p class="ending-dev-empty ending-dev-data-empty">별풍 SSAPI 이벤트 없음<br><span class="ending-dev-empty__hint">메시지 없는 별풍도 SSAPI에서 오면 여기 표시됩니다.</span></p>`;
     }
     return `<ol class="ending-dev-notes ending-dev-notes--ssapi">
       ${list
         .map((row) => {
           const when = row.at ? `<span class="ending-dev-notes__at">${esc(chartClockLabel(row.at))}</span>` : "";
           const amt = row.value ? `<span class="ending-dev-notes__amt">${esc(row.value)}</span>` : "";
+          const body = String(row.text || "").trim()
+            ? `<p class="ending-dev-notes__text">${esc(row.text)}</p>`
+            : `<p class="ending-dev-notes__text ending-dev-notes__text--muted">메시지 없음</p>`;
           return `<li>
             <span class="ending-dev-notes__name">${esc(row.name || "익명")}</span>
             ${amt}
             ${when}
-            <p class="ending-dev-notes__text">${esc(row.text)}</p>
+            ${body}
           </li>`;
         })
         .join("")}
@@ -2285,7 +2289,9 @@
       : normalizeSsapiAssist(data.ssapi || devLiveExtras(sess.collected)?.ssapi);
     const ssapiLabel = ssapi
       ? ssapi.connected
-        ? "SSAPI 연결"
+        ? ssapi.eventCount || ssapi.lastIngestAt
+          ? "SSAPI 수신"
+          : "SSAPI 소켓"
         : ssapi.lastError
           ? "SSAPI 오류"
           : "SSAPI"
