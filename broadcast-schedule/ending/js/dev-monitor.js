@@ -44,7 +44,6 @@
   };
 
   const DATA_TAB_KEY = "ending_dev_monitor_data_tab";
-  const DATA_LIMIT_KEY = "ending_dev_monitor_data_limit";
   const METRICS_CHART_MODE_KEY = "ending_dev_monitor_metrics_chart_mode";
   const CHART_ZOOM_STORAGE_KEY = "ending_dev_chart_zoom";
   const CHART_PAN_STORAGE_KEY = "ending_dev_chart_pan";
@@ -56,18 +55,12 @@
     { value: "viewers", label: "시청자" },
     { value: "chat", label: "화력" },
   ];
-  const DATA_LIMITS = [
-    { value: 10, label: "10" },
-    { value: 50, label: "50" },
-    { value: 100, label: "100" },
-    { value: 0, label: "전체" },
-  ];
+  const OVERVIEW_PREVIEW_LIMIT = 10;
   let timer = null;
   let busy = false;
   let lastData = null;
   let activeTab = MONITOR_MODE;
   let dataTabId = "";
-  let dataLimit = 10;
   let metricsChartMode = "both";
   let dataCatsCache = [];
   let viewMode = "live"; // live | history
@@ -82,6 +75,7 @@
   let chartPlotScrolling = false;
   let chartPlotScrollIdleTimer = null;
   let chartPatchDeferred = null;
+  let categoryModalEl = null;
 
   try {
     dataTabId = String(sessionStorage.getItem(DATA_TAB_KEY) || "").trim();
@@ -104,15 +98,6 @@
     const modeRaw = String(sessionStorage.getItem(METRICS_CHART_MODE_KEY) || "").trim();
     if (modeRaw === "both" || modeRaw === "viewers" || modeRaw === "chat") {
       metricsChartMode = modeRaw;
-    }
-  } catch (_) {
-    /* ignore */
-  }
-  try {
-    const limRaw = sessionStorage.getItem(DATA_LIMIT_KEY);
-    if (limRaw != null && limRaw !== "") {
-      const n = Number(limRaw);
-      if (n === 0 || n === 10 || n === 50 || n === 100) dataLimit = n;
     }
   } catch (_) {
     /* ignore */
@@ -748,7 +733,7 @@
     const counts = metricsCat.counts || (collected || {}).counts || {};
     const rankCats = (Array.isArray(cats) ? cats : []).filter((c) => c.id !== "metricsChart");
     const readyCats = rankCats.filter((c) => categoryHasData(c));
-    const limit = dataLimit > 0 ? dataLimit : 0;
+    const limit = OVERVIEW_PREVIEW_LIMIT;
     const totalItems = readyCats.reduce(
       (n, c) => n + Math.max(Number(c.count || 0), c.items?.length || 0),
       0
@@ -773,13 +758,14 @@
       if (gridInside) {
         const titles = normalizeTitleHistory(metricsCat.titleHistory);
         const titleN = titles.length;
+        const titlePreview = titles.slice(0, OVERVIEW_PREVIEW_LIMIT);
         gridInside.innerHTML = `<section class="ending-dev-digest__card">
             <h5 class="ending-dev-digest__h">첫 채팅</h5>
             ${renderFirstChatPanel(metricsCat.firstChat)}
           </section>
           <section class="ending-dev-digest__card">
-            <h5 class="ending-dev-digest__h">방제 변경${titleN ? ` · ${titleN}` : ""}</h5>
-            ${renderTitleHistoryPanel(titles)}
+            ${renderDigestCardHead(`방제 변경${titleN ? ` · ${titleN}` : ""}`, "__titleHistory", titleN)}
+            ${renderTitleHistoryPanel(titlePreview)}
           </section>`;
       }
     }
@@ -1693,6 +1679,7 @@
     const chart = renderMetricsChartPanel(active?.metricsSeries, counts, replay, mode);
     const titles = normalizeTitleHistory(active?.titleHistory);
     const titleN = titles.length;
+    const titlePreview = titles.slice(0, OVERVIEW_PREVIEW_LIMIT);
     return {
       html: `<div class="ending-dev-digest">
         ${chart.html}
@@ -1702,8 +1689,8 @@
             ${renderFirstChatPanel(active?.firstChat)}
           </section>
           <section class="ending-dev-digest__card">
-            <h5 class="ending-dev-digest__h">방제 변경${titleN ? ` · ${titleN}` : ""}</h5>
-            ${renderTitleHistoryPanel(titles)}
+            ${renderDigestCardHead(`방제 변경${titleN ? ` · ${titleN}` : ""}`, "__titleHistory", titleN)}
+            ${renderTitleHistoryPanel(titlePreview)}
           </section>
         </div>
       </div>`,
@@ -2874,6 +2861,96 @@
     return sliced.map((row, i) => ({ ...row, rank: i + 1 }));
   }
 
+  function categoryTotalCount(cat) {
+    if (!cat || typeof cat !== "object") return 0;
+    if (cat.kind === "titleHistory") return (cat.titleHistory || []).length;
+    if (cat.kind === "missionRuns") return normalizeMissionRuns(cat.missionRuns).length;
+    if (cat.kind === "ssapi") return normalizeSsapiAssist(cat.ssapi).eventCount;
+    if (cat.kind === "donationNotes") {
+      const itemsN = Math.max(Number(cat.count || 0), cat.items?.length || 0);
+      const notesN = normalizeDonationNotes(cat.donationNotes).length;
+      return itemsN + notesN;
+    }
+    return Math.max(Number(cat.count || 0), cat.items?.length || 0);
+  }
+
+  function renderViewAllButton(catId, total, previewLimit = OVERVIEW_PREVIEW_LIMIT) {
+    const id = String(catId || "").trim();
+    if (!id || total <= previewLimit) return "";
+    return `<button type="button" class="ending-dev-view-all" data-cat-view-all="${esc(
+      id
+    )}">전체 보기</button>`;
+  }
+
+  function renderDigestCardHead(titleHtml, catId, total) {
+    return `<header class="ending-dev-digest__head">
+      <h5 class="ending-dev-digest__h">${titleHtml}</h5>
+      ${renderViewAllButton(catId, total)}
+    </header>`;
+  }
+
+  function resolveCategoryForModal(catId) {
+    const id = String(catId || "").trim();
+    if (id === "__titleHistory") {
+      const metricsCat = (dataCatsCache || []).find((c) => c.id === "metricsChart") || {};
+      const titles = normalizeTitleHistory(metricsCat.titleHistory);
+      if (!titles.length) return null;
+      return {
+        id: "__titleHistory",
+        title: "방제 변경",
+        kind: "titleHistory",
+        titleHistory: titles,
+      };
+    }
+    const cat = (dataCatsCache || []).find((c) => c.id === id);
+    if (!cat || !categoryHasData(cat)) return null;
+    return cat;
+  }
+
+  function ensureCategoryListModal() {
+    if (categoryModalEl) return categoryModalEl;
+    const root = document.createElement("div");
+    root.className = "ending-dev-cat-modal hidden";
+    root.hidden = true;
+    root.innerHTML = `<div class="ending-dev-cat-modal__backdrop" data-cat-modal-close></div>
+      <div class="ending-dev-cat-modal__panel" role="dialog" aria-modal="true" aria-labelledby="dev-cat-modal-title">
+        <header class="ending-dev-cat-modal__head">
+          <h4 class="ending-dev-cat-modal__title" id="dev-cat-modal-title" data-cat-modal-title></h4>
+          <button type="button" class="ending-dev-cat-modal__close" data-cat-modal-close aria-label="닫기">×</button>
+        </header>
+        <div class="ending-dev-cat-modal__body" data-cat-modal-body></div>
+      </div>`;
+    document.body.appendChild(root);
+    categoryModalEl = root;
+    root.addEventListener("click", (ev) => {
+      if (ev.target?.closest?.("[data-cat-modal-close]")) closeCategoryListModal();
+    });
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape" && categoryModalEl && !categoryModalEl.hidden) closeCategoryListModal();
+    });
+    return root;
+  }
+
+  function openCategoryListModal(catId) {
+    const cat = resolveCategoryForModal(catId);
+    if (!cat) return;
+    const modal = ensureCategoryListModal();
+    const titleEl = modal.querySelector("[data-cat-modal-title]");
+    const bodyEl = modal.querySelector("[data-cat-modal-body]");
+    if (titleEl) titleEl.textContent = cat.title || "목록";
+    if (bodyEl) bodyEl.innerHTML = renderOverviewCategoryBody(cat, 0);
+    modal.hidden = false;
+    modal.classList.remove("hidden");
+    document.body.classList.add("ending-dev-modal-open");
+  }
+
+  function closeCategoryListModal() {
+    if (!categoryModalEl) return;
+    categoryModalEl.hidden = true;
+    categoryModalEl.classList.add("hidden");
+    document.body.classList.remove("ending-dev-modal-open");
+  }
+
   function renderChartModeToggles(mode) {
     return `<div class="ending-dev-chart-mode" role="group" aria-labelledby="dev-chart-mode-label">
       ${METRICS_CHART_MODES.map((opt) => {
@@ -2882,19 +2959,6 @@
           opt.value
         )}">${esc(opt.label)}</button>`;
       }).join("")}
-    </div>`;
-  }
-
-  function renderLimitToggles(total) {
-    return `<div class="ending-dev-limit" role="group" aria-labelledby="dev-limit-label">
-      ${DATA_LIMITS.map((opt) => {
-        const on = dataLimit === opt.value;
-        const label = opt.value === 0 ? "전체" : opt.label;
-        return `<button type="button" class="ending-dev-limit__btn${on ? " is-on" : ""}" data-limit="${
-          opt.value
-        }">${esc(label)}</button>`;
-      }).join("")}
-      <span class="ending-dev-limit__total">${esc(fmtNum(total))}건</span>
     </div>`;
   }
 
@@ -2939,6 +3003,9 @@
   }
 
   function renderOverviewCategoryBody(cat, limit) {
+    if (cat.kind === "titleHistory") {
+      return renderTitleHistoryPanel(cat.titleHistory);
+    }
     if (cat.kind === "missionRuns") {
       const rows = normalizeMissionRuns(cat.missionRuns).slice(0, limit > 0 ? limit : undefined);
       if (!rows.length) {
@@ -2960,7 +3027,7 @@
     }
     if (cat.kind === "ssapi") {
       const data = normalizeSsapiAssist(cat.ssapi);
-      const events = data.events.slice(0, limit > 0 ? limit : 8);
+      const events = limit > 0 ? data.events.slice(0, limit) : data.events;
       if (!events.length) {
         return `${renderSsapiStatus(data)}<p class="ending-dev-empty ending-dev-data-empty">이벤트 없음</p>`;
       }
@@ -2982,7 +3049,9 @@
     }
     if (cat.kind === "donationNotes") {
       const shown = sliceItemsForLimit(cat.items, limit);
-      const notes = normalizeDonationNotes(cat.donationNotes).slice(0, limit > 0 ? limit : 5);
+      const notes = limit > 0
+        ? normalizeDonationNotes(cat.donationNotes).slice(0, limit)
+        : normalizeDonationNotes(cat.donationNotes);
       const list = renderDataList(shown, { compact: true });
       const noteBlock =
         notes.length > 0
@@ -3003,21 +3072,20 @@
     return 1;
   }
 
-  function overviewBodyScrollable(limit) {
-    return limit === 0 || limit > 10;
-  }
-
-  function renderOverviewCategoryCard(cat, limit) {
+  function renderOverviewCategoryCard(cat, limit = OVERVIEW_PREVIEW_LIMIT) {
     const span = overviewCardSpan(cat);
+    const total = categoryTotalCount(cat);
     const countLabel =
       cat.count > 0 ? `${fmtNum(cat.count)}건` : cat.pending ? "대기" : "0건";
-    const scrollable = overviewBodyScrollable(limit);
     return `<article class="ending-dev-overview-card" data-span="${span}" data-cat="${esc(cat.id)}">
       <header class="ending-dev-overview-card__head">
         <h5 class="ending-dev-overview-card__title">${esc(cat.title)}</h5>
-        <span class="ending-dev-overview-card__count">${esc(countLabel)}</span>
+        <div class="ending-dev-overview-card__actions">
+          ${renderViewAllButton(cat.id, total, limit)}
+          <span class="ending-dev-overview-card__count">${esc(countLabel)}</span>
+        </div>
       </header>
-      <div class="ending-dev-overview-card__body${scrollable ? " is-scrollable" : ""}">${renderOverviewCategoryBody(cat, limit)}</div>
+      <div class="ending-dev-overview-card__body">${renderOverviewCategoryBody(cat, limit)}</div>
     </article>`;
   }
 
@@ -3042,7 +3110,7 @@
     const digest = renderMetricsDigest(metricsCat, counts, replay, metricsChartMode);
     const rankCats = (Array.isArray(cats) ? cats : []).filter((c) => c.id !== "metricsChart");
     const readyCats = rankCats.filter((c) => categoryHasData(c));
-    const limit = dataLimit > 0 ? dataLimit : 0;
+    const limit = OVERVIEW_PREVIEW_LIMIT;
     const totalItems = readyCats.reduce(
       (n, c) => n + Math.max(Number(c.count || 0), c.items?.length || 0),
       0
@@ -3061,10 +3129,6 @@
             <div class="ending-dev-tool-group ending-dev-tool-group--chart">
               <span class="ending-dev-tool-group__label" id="dev-chart-mode-label">그래프</span>
               ${renderChartModeToggles(metricsChartMode)}
-            </div>
-            <div class="ending-dev-tool-group ending-dev-tool-group--limit">
-              <span class="ending-dev-tool-group__label" id="dev-limit-label">목록</span>
-              ${renderLimitToggles(totalItems)}
             </div>
           </div>
         </div>
@@ -3264,21 +3328,6 @@
     metricsChartMode = next;
     try {
       sessionStorage.setItem(METRICS_CHART_MODE_KEY, metricsChartMode);
-    } catch (_) {
-      /* ignore */
-    }
-    if (!lastData) return;
-    const acc = resolveAccount(lastData, activeTab);
-    renderDataPanel(acc.sections, (acc.session || {}).collected || {});
-  }
-
-  function onDataLimitClick(limit) {
-    const n = Number(limit);
-    if (!(n === 0 || n === 10 || n === 50 || n === 100)) return;
-    if (n === dataLimit) return;
-    dataLimit = n;
-    try {
-      sessionStorage.setItem(DATA_LIMIT_KEY, String(dataLimit));
     } catch (_) {
       /* ignore */
     }
@@ -3712,9 +3761,10 @@
       onChartModeClick(modeBtn.getAttribute("data-chart-mode"));
       return;
     }
-    const btn = ev.target?.closest?.("[data-limit]");
-    if (!btn) return;
-    onDataLimitClick(btn.getAttribute("data-limit"));
+    const viewAllBtn = ev.target?.closest?.("[data-cat-view-all]");
+    if (viewAllBtn) {
+      openCategoryListModal(viewAllBtn.getAttribute("data-cat-view-all"));
+    }
   });
   els.refresh?.addEventListener("click", () => refresh());
   els.auto?.addEventListener("change", () => schedule());
