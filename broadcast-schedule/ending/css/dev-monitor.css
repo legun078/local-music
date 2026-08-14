@@ -1675,13 +1675,17 @@ html.ending-oauth-busy body::before {
 
 .ending-dev-chart__scroll {
   width: 100%;
-  overflow-x: hidden;
-  overflow-y: hidden;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden;
 }
 
-.ending-dev-chart__scroll.is-zoomed {
-  overflow-x: auto;
+.ending-dev-chart__zoom-label--pan {
+  margin-left: 0.15rem;
+}
+
+.ending-dev-chart__zoom-range--pan {
+  flex: 1 1 5rem;
+  min-width: 4.5rem;
+  max-width: 9rem;
 }
 
 .ending-dev-chart--dual .ending-dev-chart__wrap {
