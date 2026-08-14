@@ -1,0 +1,11 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Local virtualenv (created by the update script)
+broadcast-schedule/venv/
+
+# Runtime data written by credits_server / credits_store
+broadcast-schedule/data/
+broadcast-schedule/.env
