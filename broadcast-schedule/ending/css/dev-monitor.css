@@ -1909,14 +1909,33 @@ html.ending-oauth-busy body::before {
   stroke-width: 2;
 }
 
+.ending-dev-chart__peak-badge {
+  fill: rgba(255, 255, 255, 0.94);
+  stroke: rgba(47, 95, 154, 0.22);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.ending-dev-chart__peak--chat .ending-dev-chart__peak-badge {
+  stroke: rgba(196, 92, 38, 0.24);
+}
+
+.ending-dev-chart__peak-lead {
+  stroke: rgba(47, 95, 154, 0.35);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.ending-dev-chart__peak--chat .ending-dev-chart__peak-lead {
+  stroke: rgba(196, 92, 38, 0.35);
+}
+
 .ending-dev-chart__peak text {
   font-size: 9px;
   font-weight: 700;
   fill: var(--dev-blue);
   font-family: var(--dev-mono);
-  paint-order: stroke;
-  stroke: #fff;
-  stroke-width: 3px;
 }
 
 .ending-dev-chart__peak--chat circle {
@@ -1924,6 +1943,42 @@ html.ending-oauth-busy body::before {
 }
 
 .ending-dev-chart__peak--chat text {
+  fill: #c45c26;
+}
+
+.ending-dev-chart__peak-combo-bg {
+  fill: rgba(255, 255, 255, 0.96);
+  stroke: rgba(47, 95, 154, 0.2);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 1px 2px rgba(15, 35, 70, 0.12));
+}
+
+.ending-dev-chart__peak-combo-lead {
+  stroke: rgba(80, 98, 126, 0.38);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.ending-dev-chart__peak-combo-lead--viewers {
+  stroke: rgba(47, 95, 154, 0.45);
+}
+
+.ending-dev-chart__peak-combo-lead--chat {
+  stroke: rgba(196, 92, 38, 0.45);
+}
+
+.ending-dev-chart__peak-combo-line {
+  font-size: 9px;
+  font-weight: 800;
+  font-family: var(--dev-mono);
+}
+
+.ending-dev-chart__peak-combo-line--viewers {
+  fill: #2f5f9a;
+}
+
+.ending-dev-chart__peak-combo-line--chat {
   fill: #c45c26;
 }
 

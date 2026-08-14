@@ -545,7 +545,7 @@
         /* ignore */
       }
     } else {
-      const range = chartActiveFullTimeRange();
+      const range = chartFullRangeMs(chartActiveFullTimeRange());
       if (range) {
         const { fullMinMs, fullMaxMs } = range;
         let centerMs;
@@ -1604,17 +1604,149 @@
     return links;
   }
 
-  function renderPeakMark(peak, x, y, extraClass) {
+  function chartPeakLabelBox(x, labelY, text, anchor = "middle") {
+    const t = String(text || "");
+    const w = Math.max(18, t.length * 6.2 + 8);
+    const h = 12;
+    let x0 = x - w / 2;
+    if (anchor === "end") x0 = x - w;
+    if (anchor === "start") x0 = x;
+    return { x0, y0: labelY - 10, x1: x0 + w, y1: labelY + 2, anchor, w, h };
+  }
+
+  function chartPeakLabelBoxesOverlap(a, b) {
+    return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+  }
+
+  function renderPeakMark(peak, x, y, extraClass, layout = {}) {
     if (!peak || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return "";
     const v = Number(peak.v);
     if (!Number.isFinite(v) || v <= 0) return "";
     const cls = extraClass ? ` ending-dev-chart__peak ${extraClass}` : " ending-dev-chart__peak";
+    const lx = Number(layout.labelX ?? x);
+    const ly = Number(layout.labelY ?? y - 8);
+    const anchor = layout.anchor || "middle";
+    const text = fmtNum(v);
+    const box = chartPeakLabelBox(lx, ly, text, anchor);
+    const lead =
+      layout.lead && (Math.abs(lx - x) > 1.5 || Math.abs(ly - (y - 8)) > 1.5)
+        ? `<line class="ending-dev-chart__peak-lead" x1="${x.toFixed(1)}" y1="${y.toFixed(1)}" x2="${lx.toFixed(1)}" y2="${(ly + 2).toFixed(1)}" vector-effect="non-scaling-stroke" />`
+        : "";
     return `<g class="${cls.trim()}" pointer-events="none">
+      ${lead}
       <circle cx="${Number(x).toFixed(1)}" cy="${Number(y).toFixed(1)}" r="3.2" vector-effect="non-scaling-stroke" />
-      <text x="${Number(x).toFixed(1)}" y="${(Number(y) - 8).toFixed(1)}" text-anchor="middle">${esc(
-        fmtNum(v)
-      )}</text>
+      <rect class="ending-dev-chart__peak-badge" x="${box.x0.toFixed(1)}" y="${(box.y0 - 1).toFixed(1)}" width="${box.w.toFixed(1)}" height="${(box.h + 2).toFixed(1)}" rx="4" />
+      <text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="${anchor}">${esc(text)}</text>
     </g>`;
+  }
+
+  function renderCombinedPeakMark(marks, pad, w, h) {
+    const list = Array.isArray(marks) ? marks : [];
+    if (!list.length) return "";
+    if (list.length === 1) {
+      const m = list[0];
+      return renderPeakMark(m.peak, m.x, m.y, m.extraClass);
+    }
+    const cx = list.reduce((sum, m) => sum + m.x, 0) / list.length;
+    const topY = Math.min(...list.map((m) => m.y));
+    const rows = list.map((m) => ({
+      kind: m.kind,
+      text: fmtNum(m.peak.v),
+      cls: m.extraClass,
+    }));
+    const lineH = 12;
+    const padX = 8;
+    const padY = 5;
+    const maxTextW = Math.max(...rows.map((r) => r.text.length * 6.2 + 4));
+    const boxW = maxTextW + padX * 2;
+    const boxH = rows.length * lineH + padY * 2;
+    let boxY = topY - boxH - 12;
+    boxY = Math.max(pad.t + 2, boxY);
+    let boxX = cx - boxW / 2;
+    boxX = Math.max(pad.l + 2, Math.min(w - pad.r - boxW - 2, boxX));
+    const anchorX = boxX + boxW / 2;
+    const anchorY = boxY + boxH;
+    const dots = list
+      .map(
+        (m) =>
+          `<circle class="ending-dev-chart__peak ${m.extraClass}" cx="${m.x.toFixed(1)}" cy="${m.y.toFixed(1)}" r="3.2" vector-effect="non-scaling-stroke" />`
+      )
+      .join("");
+    const leads = list
+      .map(
+        (m) =>
+          `<line class="ending-dev-chart__peak-combo-lead ending-dev-chart__peak-combo-lead--${m.kind}" x1="${m.x.toFixed(1)}" y1="${m.y.toFixed(1)}" x2="${anchorX.toFixed(1)}" y2="${anchorY.toFixed(1)}" vector-effect="non-scaling-stroke" />`
+      )
+      .join("");
+    const labels = rows
+      .map((row, i) => {
+        const y = boxY + padY + 9 + i * lineH;
+        return `<text class="ending-dev-chart__peak-combo-line ending-dev-chart__peak-combo-line--${esc(row.kind)}" x="${anchorX.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="middle">${esc(row.text)}</text>`;
+      })
+      .join("");
+    return `<g class="ending-dev-chart__peak-combo" pointer-events="none">
+      ${leads}
+      ${dots}
+      <rect class="ending-dev-chart__peak-combo-bg" x="${boxX.toFixed(1)}" y="${boxY.toFixed(1)}" width="${boxW.toFixed(1)}" height="${boxH.toFixed(1)}" rx="6" />
+      ${labels}
+    </g>`;
+  }
+
+  function renderDualPeakMarks(viewerPeak, chatPeak, xAtTime, yViewers, yChats, viewMinMs, viewMaxMs, pad, w, h) {
+    const items = [];
+    if (viewerPeak && chartTimeInWindow(viewerPeak.at, viewMinMs, viewMaxMs)) {
+      items.push({
+        peak: viewerPeak,
+        kind: "viewers",
+        extraClass: "ending-dev-chart__peak--viewers",
+        x: xAtTime(viewerPeak.at),
+        y: yViewers(viewerPeak.v),
+      });
+    }
+    if (chatPeak && chartTimeInWindow(chatPeak.at, viewMinMs, viewMaxMs)) {
+      items.push({
+        peak: chatPeak,
+        kind: "chat",
+        extraClass: "ending-dev-chart__peak--chat",
+        x: xAtTime(chatPeak.at),
+        y: yChats(chatPeak.v),
+      });
+    }
+    if (!items.length) return "";
+    if (items.length === 1) {
+      const m = items[0];
+      return renderPeakMark(m.peak, m.x, m.y, m.extraClass);
+    }
+
+    const a = items[0];
+    const b = items[1];
+    const dx = Math.abs(a.x - b.x);
+    const msA = parseChartDate(a.peak.at)?.getTime();
+    const msB = parseChartDate(b.peak.at)?.getTime();
+    const dt = Number.isFinite(msA) && Number.isFinite(msB) ? Math.abs(msA - msB) : Infinity;
+    const boxA = chartPeakLabelBox(a.x, a.y - 8, fmtNum(a.peak.v));
+    const boxB = chartPeakLabelBox(b.x, b.y - 8, fmtNum(b.peak.v));
+    const labelsOverlap = chartPeakLabelBoxesOverlap(boxA, boxB);
+    const sameSpike = dx < 48 && dt <= 6 * 60_000;
+
+    if (labelsOverlap || sameSpike) {
+      return renderCombinedPeakMark(items, pad, w, h);
+    }
+
+    if (dx < 72) {
+      const upper = a.y <= b.y ? a : b;
+      const lower = a.y <= b.y ? b : a;
+      return `${renderPeakMark(upper.peak, upper.x, upper.y, upper.extraClass, {
+        labelY: upper.y - 8,
+        anchor: "middle",
+      })}${renderPeakMark(lower.peak, lower.x, lower.y, lower.extraClass, {
+        labelY: lower.y - 22,
+        anchor: "middle",
+        lead: true,
+      })}`;
+    }
+
+    return items.map((m) => renderPeakMark(m.peak, m.x, m.y, m.extraClass)).join("");
   }
 
   function scrollChartXIntoView(wrap, chartX, fullMinMs, fullMaxMs, viewMinMs, viewMaxMs) {
@@ -2087,25 +2219,18 @@
     ]
       .filter(Boolean)
       .join(" · ");
-    const peakMarks = `${
-      viewerPeak && chartTimeInWindow(viewerPeak.at, viewMinMs, viewMaxMs)
-        ? renderPeakMark(
-            viewerPeak,
-            xAtTime(viewerPeak.at),
-            yViewers(viewerPeak.v),
-            "ending-dev-chart__peak--viewers"
-          )
-        : ""
-    }${
-      chatPeak && chartTimeInWindow(chatPeak.at, viewMinMs, viewMaxMs)
-        ? renderPeakMark(
-            chatPeak,
-            xAtTime(chatPeak.at),
-            yChats(chatPeak.v),
-            "ending-dev-chart__peak--chat"
-          )
-        : ""
-    }`;
+    const peakMarks = renderDualPeakMarks(
+      viewerPeak,
+      chatPeak,
+      xAtTime,
+      yViewers,
+      yChats,
+      viewMinMs,
+      viewMaxMs,
+      pad,
+      w,
+      h
+    );
     return {
       html: `<div class="ending-dev-chart ending-dev-chart--dual">
       ${renderChartToolbar({ jumps: [viewerPeak, chatPeak], meta, showLegend: true })}
