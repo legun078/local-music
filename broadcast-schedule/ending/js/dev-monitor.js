@@ -510,7 +510,6 @@
   const CHART_HEADROOM = 0.12;
   const CHART_X_INSET = 6;
   const CHART_Y_INSET = 5;
-  const CHART_MIN_PX_PER_POINT = 6;
   const CHART_ZOOM_MIN = 1;
   const CHART_ZOOM_MAX = 8;
   const CHART_ZOOM_DEFAULT = 1;
@@ -552,6 +551,38 @@
     const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
     if (z <= CHART_ZOOM_MIN + 0.001) return "전체";
     return `${Math.round(z * 100)}%`;
+  }
+
+  function chartIsFitZoom(zoom = chartZoomLevel()) {
+    return Number(zoom) <= CHART_ZOOM_MIN + 0.001;
+  }
+
+  function chartLogicalWidth() {
+    return CHART_W;
+  }
+
+  function syncChartScrollLayouts(root) {
+    if (!root) return;
+    const zoom = chartZoomLevel();
+    const fit = chartIsFitZoom(zoom);
+    root.querySelectorAll(".ending-dev-chart__scroll").forEach((scroller) => {
+      const wrap = scroller.querySelector("[data-chart-wrap]");
+      if (!wrap) return;
+      const base = Math.max(240, scroller.clientWidth || CHART_W);
+      wrap.dataset.chartViewport = String(base);
+      wrap.dataset.chartZoom = String(zoom);
+      if (fit) {
+        wrap.style.width = "100%";
+        wrap.style.minWidth = "";
+        scroller.classList.remove("is-zoomed");
+        scroller.scrollLeft = 0;
+        return;
+      }
+      const minW = Math.max(base + 1, Math.round(base * zoom));
+      wrap.style.width = `${minW}px`;
+      wrap.style.minWidth = `${minW}px`;
+      scroller.classList.add("is-zoomed");
+    });
   }
 
   function renderChartZoomControls() {
@@ -661,8 +692,7 @@
   }
 
   function chartPixelWidth(_count, _pad, minW = CHART_W) {
-    const zoom = chartZoomLevel();
-    return Math.max(minW, Math.round(minW * zoom));
+    return chartLogicalWidth();
   }
 
   function chartAxisLayout(count, pad, w, h, maxV, opts = {}) {
@@ -1625,8 +1655,8 @@
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
       <div class="ending-dev-chart__scroll">
-      <div class="ending-dev-chart__wrap" data-chart-wrap style="min-width:${w}px"
-        data-chart-width="${w}" data-chart-height="${h}"
+      <div class="ending-dev-chart__wrap" data-chart-wrap
+        data-chart-width="${CHART_W}" data-chart-height="${h}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
         <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${esc(o.ariaLabel || "추이")}">
           ${yLines}
@@ -1759,8 +1789,8 @@
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
       <div class="ending-dev-chart__scroll">
-      <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1" style="min-width:${w}px"
-        data-chart-width="${w}" data-chart-height="${h}"
+      <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1"
+        data-chart-width="${CHART_W}" data-chart-height="${h}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
         <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="시청자·채팅 화력 추이">
           ${yLines}
@@ -1787,7 +1817,7 @@
         viewerPoints: viewers,
         chatPoints: chats,
         replay,
-        width: w,
+        width: CHART_W,
         height: h,
         pad,
         minMs,
@@ -2251,6 +2281,10 @@
       if (cat && body) state.cards[cat] = body.scrollTop;
     });
     root.querySelectorAll(".ending-dev-chart__scroll").forEach((el) => {
+      if (chartIsFitZoom()) {
+        state.charts.push(0);
+        return;
+      }
       state.charts.push(el.scrollLeft);
     });
     return state;
@@ -2265,7 +2299,12 @@
     });
     const charts = root.querySelectorAll(".ending-dev-chart__scroll");
     (state.charts || []).forEach((left, i) => {
-      if (charts[i] && typeof left === "number") charts[i].scrollLeft = left;
+      if (!charts[i]) return;
+      if (chartIsFitZoom()) {
+        charts[i].scrollLeft = 0;
+        return;
+      }
+      if (typeof left === "number") charts[i].scrollLeft = left;
     });
     const y = Number(state.windowY);
     if (Number.isFinite(y) && y > 0) {
@@ -2375,8 +2414,13 @@
     if (overview.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, overview.bind);
     else if (overview.bind) mountMetricChartInteraction(els.dataBody, overview.bind);
 
+    syncChartScrollLayouts(els.dataBody);
     restoreScrollState(els.dataBody, scrollState);
-    requestAnimationFrame(() => persistScrollState(captureScrollState(els.dataBody)));
+    requestAnimationFrame(() => {
+      syncChartScrollLayouts(els.dataBody);
+      restoreScrollState(els.dataBody, scrollState);
+      persistScrollState(captureScrollState(els.dataBody));
+    });
   }
 
   function onChartZoomAction(action, value) {
@@ -2863,6 +2907,14 @@
   els.auto?.addEventListener("change", () => schedule());
   window.addEventListener("scroll", scheduleScrollPersist, { passive: true });
   els.dataBody?.addEventListener("scroll", scheduleScrollPersist, { passive: true, capture: true });
+  window.addEventListener(
+    "resize",
+    () => {
+      if (!els.dataBody) return;
+      syncChartScrollLayouts(els.dataBody);
+    },
+    { passive: true }
+  );
 
   window.__liveDataRefresh = () => refresh();
 
