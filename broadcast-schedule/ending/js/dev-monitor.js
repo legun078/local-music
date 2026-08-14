@@ -1638,7 +1638,7 @@
     return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
   }
 
-  function chartPeakSideBox(cx, cy, boxW, boxH, pad, w, prefer = "right") {
+  function chartPeakSideBox(cx, cy, boxW, boxH, pad, w, h, prefer = "right") {
     const gap = 18;
     const plotLeft = pad.l + 2;
     const plotRight = w - pad.r - 2;
@@ -1690,7 +1690,7 @@
       (layout.labelX == null && layout.labelY == null && chartPeakPreferSide(y, pad, h));
     if (useSide) {
       const prefer = x < (pad.l + w - pad.r) / 2 ? "right" : "left";
-      const box = chartPeakSideBox(x, y, boxW, boxH, pad, w, prefer);
+      const box = chartPeakSideBox(x, y, boxW, boxH, pad, w, h, prefer);
       badgeX = box.boxX;
       badgeY = box.boxY;
       anchor = "middle";
@@ -1735,7 +1735,7 @@
     const boxW = maxTextW + padX * 2;
     const boxH = rows.length * lineH + padY * 2;
     const prefer = cx < (pad.l + w - pad.r) / 2 ? "right" : "left";
-    const box = chartPeakSideBox(cx, midY, boxW, boxH, pad, w, prefer);
+    const box = chartPeakSideBox(cx, midY, boxW, boxH, pad, w, h, prefer);
     const anchorX = box.boxX + boxW / 2;
     const dots = list
       .map(
