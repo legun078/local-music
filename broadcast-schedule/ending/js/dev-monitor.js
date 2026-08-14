@@ -351,10 +351,13 @@
   }
 
   function resolveViewerPeak(points, counts) {
-    const hinted = nearestSeriesPointAtTime(points, counts?.peakViewersAt);
     const seriesPeak = peakSeriesPoint(points);
-    const at = String(hinted?.at || seriesPeak?.at || "").trim();
-    const v = Number(counts?.peakViewers) || hinted?.v || seriesPeak?.v || 0;
+    const hinted = nearestSeriesPointAtTime(points, counts?.peakViewersAt);
+    // 힌트 시각이 한 분 앞으로 붙으면 최고점이 아닌 오르막(1872 등)을 집을 수 있다.
+    const peak =
+      seriesPeak && hinted && Number(hinted.v) >= Number(seriesPeak.v) ? hinted : seriesPeak || hinted;
+    const at = String(peak?.at || "").trim();
+    const v = Math.max(Number(counts?.peakViewers) || 0, Number(peak?.v) || 0);
     if (!at || v <= 0) return null;
     return { kind: "viewers", at, v };
   }
@@ -857,9 +860,17 @@
   }
 
   function chartClientXToSvgX(svg, clientX, w) {
+    return chartClientToSvg(svg, clientX, 0, w, 1).x;
+  }
+
+  function chartClientToSvg(svg, clientX, clientY, w, h) {
     const rect = svg?.getBoundingClientRect?.();
-    if (!rect?.width) return 0;
-    return ((clientX - rect.left) / rect.width) * w;
+    if (!rect?.width) return { x: 0, y: 0 };
+    const height = rect.height || 1;
+    return {
+      x: ((clientX - rect.left) / rect.width) * w,
+      y: ((clientY - rect.top) / height) * h,
+    };
   }
 
   function showChartCursorLine(el, x, y1, y2) {
@@ -884,7 +895,7 @@
     const tip = chartTipEl(wrap);
     const box = wrap?.closest?.(".ending-dev-chart")?.querySelector?.("[data-chart-readout]");
     if (tip) tip.innerHTML = html || "";
-    if (box) box.hidden = !html;
+    if (box) box.hidden = false;
   }
 
   function renderChartMeta(text) {
@@ -921,14 +932,17 @@
     return best;
   }
 
-  function nearestSeriesPointAtChartX(points, chartX, xAt) {
+  function nearestSeriesPointAtChartXY(points, chartX, chartY, xAt, yAt) {
     const list = Array.isArray(points) ? points : [];
     const n = list.length;
     if (!n) return null;
+    const hasY = Number.isFinite(Number(chartY)) && typeof yAt === "function";
     let bestI = 0;
-    let bestDist = Math.abs(xAt(0) - chartX);
-    for (let i = 1; i < n; i++) {
-      const d = Math.abs(xAt(i) - chartX);
+    let bestDist = Infinity;
+    for (let i = 0; i < n; i++) {
+      const dx = xAt(i) - chartX;
+      const dy = hasY ? yAt(list[i].v) - chartY : 0;
+      const d = dx * dx + dy * dy;
       if (d < bestDist) {
         bestDist = d;
         bestI = i;
@@ -936,6 +950,25 @@
     }
     const p = list[bestI];
     return { at: p.at, v: p.v, chartX: xAt(bestI), index: bestI };
+  }
+
+  function nearestDualSnapAtChartXY(viewerPoints, chatPoints, chartX, chartY, xAtTime, yViewers, yChats) {
+    let best = null;
+    const consider = (points, yFn) => {
+      for (const p of Array.isArray(points) ? points : []) {
+        if (!p || !Number.isFinite(Number(p.v))) continue;
+        const x = Number(xAtTime(p.at));
+        const y = Number(yFn(p.v));
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+        const dx = x - chartX;
+        const dy = y - chartY;
+        const dist = dx * dx + dy * dy;
+        if (!best || dist < best.dist) best = { at: p.at, dist };
+      }
+    };
+    consider(viewerPoints, yViewers);
+    consider(chatPoints, yChats);
+    return best;
   }
 
   function chartFullLabel(at) {
@@ -1037,6 +1070,7 @@
   }
 
   let chartBindToken = 0;
+  let chartPinnedAt = "";
 
   function bindInteractiveChart(wrap, config) {
     if (!wrap || !config?.points?.length) return;
@@ -1060,10 +1094,8 @@
         ? config.formatValue
         : (v) => `${fmtNum(v)}${config.valueSuffix || ""}`;
 
-    function showAtChartX(chartX) {
-      if (String(wrap.dataset.chartToken) !== String(token)) return;
-      const hit = nearestSeriesPointAtChartX(points, chartX, xAt);
-      if (!hit) return;
+    function showHit(hit, { persist = true } = {}) {
+      if (String(wrap.dataset.chartToken) !== String(token) || !hit) return;
       const links = replayLinksForPoint(config.replay, hit.at);
       setChartTipHtml(
         wrap,
@@ -1084,31 +1116,24 @@
         }
       }
       wrap.dataset.hoverAt = hit.at;
+      if (persist) chartPinnedAt = hit.at;
     }
 
-    function hideHover() {
-      setChartTipHtml(wrap, "");
-      if (cursor) hideChartCursorLine(cursor);
-      if (marker) marker.hidden = true;
-      delete wrap.dataset.hoverAt;
+    function hitAtPointer(clientX, clientY) {
+      const pt = chartClientToSvg(svg, clientX, clientY, w, h);
+      return nearestSeriesPointAtChartXY(points, pt.x, pt.y, xAt, yAt);
     }
 
-    function pinAt(clientX) {
-      const hit = nearestSeriesPointAtChartX(points, chartClientXToSvgX(svg, clientX, w), xAt);
+    function pinHit(hit, { openTab = true } = {}) {
       if (!hit) return;
-      pinHit(hit);
-    }
-
-    function pinHit(hit) {
-      if (!hit) return;
-      showAtChartX(hit.chartX);
+      showHit(hit);
       applyChartReplay(
         wrap,
         config.replay,
         hit.at,
         (links) =>
           `${chartFullLabel(hit.at)} · ${valueFmt(hit.v)} · + ${links.offsetLabel}`,
-        { openTab: true }
+        { openTab }
       );
     }
 
@@ -1116,24 +1141,41 @@
       const p = nearestSeriesPointAtTime(points, at);
       if (!p) return;
       const idx = points.findIndex((row) => row.at === p.at);
-      pinHit({
-        at: p.at,
-        v: p.v,
-        chartX: xAt(idx >= 0 ? idx : 0),
-        index: idx,
-      });
+      pinHit(
+        {
+          at: p.at,
+          v: p.v,
+          chartX: xAt(idx >= 0 ? idx : 0),
+          index: idx,
+        },
+        { openTab: true }
+      );
     }
 
     overlay.addEventListener("mousemove", (ev) => {
-      showAtChartX(chartClientXToSvgX(svg, ev.clientX, w));
+      showHit(hitAtPointer(ev.clientX, ev.clientY));
     });
-    overlay.addEventListener("mouseleave", hideHover);
     overlay.addEventListener("click", (ev) => {
-      pinAt(ev.clientX);
+      pinHit(hitAtPointer(ev.clientX, ev.clientY));
     });
     wrap.addEventListener("ending-chart-jump", (ev) => {
       jumpToAt(ev.detail?.at);
     });
+
+    const restore =
+      (chartPinnedAt && nearestSeriesPointAtTime(points, chartPinnedAt)) || points[points.length - 1];
+    if (restore) {
+      const idx = points.findIndex((row) => row.at === restore.at);
+      showHit(
+        {
+          at: restore.at,
+          v: restore.v,
+          chartX: xAt(idx >= 0 ? idx : 0),
+          index: idx,
+        },
+        { persist: Boolean(chartPinnedAt) }
+      );
+    }
   }
 
   function bindDualInteractiveChart(wrap, config) {
@@ -1156,6 +1198,8 @@
     const maxChats = Number(config.maxChats) || 1;
     const minMs = Number(config.minMs);
     const maxMs = Number(config.maxMs);
+    const viewerPoints = Array.isArray(config.viewerPoints) ? config.viewerPoints : [];
+    const chatPoints = Array.isArray(config.chatPoints) ? config.chatPoints : [];
     const { innerH, xAtTime, yViewers, yChats } = chartDualTimeLayout(
       pad,
       w,
@@ -1166,11 +1210,8 @@
       maxChats
     );
 
-    function showAtChartX(chartX) {
-      if (String(wrap.dataset.chartToken) !== String(token)) return;
-      const hoverMs = chartXToTimeMs(chartX, pad, w, minMs, maxMs);
-      const snap = nearestMergedPointAtTime(merged, hoverMs);
-      if (!snap) return;
+    function showSnap(snap, { persist = true } = {}) {
+      if (String(wrap.dataset.chartToken) !== String(token) || !snap) return;
       const snapAt = snap.at;
       const x = xAtTime(snapAt);
       const viewerV = snap.viewers;
@@ -1215,24 +1256,36 @@
         }
       }
       wrap.dataset.hoverAt = snapAt;
+      if (persist) chartPinnedAt = snapAt;
     }
 
-    function hideHover() {
-      setChartTipHtml(wrap, "");
-      if (cursor) hideChartCursorLine(cursor);
-      if (markerViewers) markerViewers.hidden = true;
-      if (markerChats) markerChats.hidden = true;
-      delete wrap.dataset.hoverAt;
+    function snapAtPointer(clientX, clientY) {
+      const pt = chartClientToSvg(svg, clientX, clientY, w, h);
+      const hit = nearestDualSnapAtChartXY(
+        viewerPoints,
+        chatPoints,
+        pt.x,
+        pt.y,
+        xAtTime,
+        yViewers,
+        yChats
+      );
+      if (hit?.at) {
+        const want = parseChartDate(hit.at)?.getTime();
+        const snapped = nearestMergedPointAtTime(merged, want);
+        if (snapped) return snapped;
+      }
+      const hoverMs = chartXToTimeMs(pt.x, pad, w, minMs, maxMs);
+      return nearestMergedPointAtTime(merged, hoverMs);
     }
 
-    function pinSnap(snap) {
+    function pinSnap(snap, { openTab = true } = {}) {
       if (!snap) return;
-      const snapAt = snap.at;
-      showAtChartX(xAtTime(snapAt));
+      showSnap(snap);
       applyChartReplay(
         wrap,
         config.replay,
-        snapAt,
+        snap.at,
         (links) => {
           const parts = [];
           if (snap.viewers != null && Number.isFinite(Number(snap.viewers))) {
@@ -1241,32 +1294,31 @@
           if (snap.chats != null && Number.isFinite(Number(snap.chats))) {
             parts.push(`화력 ${fmtNum(Math.round(snap.chats))}회/분`);
           }
-          return `${chartFullLabel(snapAt)} · ${parts.join(" · ")} · + ${links.offsetLabel}`;
+          return `${chartFullLabel(snap.at)} · ${parts.join(" · ")} · + ${links.offsetLabel}`;
         },
-        { openTab: true }
+        { openTab }
       );
-    }
-
-    function pinAt(clientX) {
-      const hoverMs = chartXToTimeMs(chartClientXToSvgX(svg, clientX, w), pad, w, minMs, maxMs);
-      pinSnap(nearestMergedPointAtTime(merged, hoverMs));
     }
 
     function jumpToAt(at) {
       const want = parseChartDate(at)?.getTime();
-      pinSnap(nearestMergedPointAtTime(merged, want));
+      pinSnap(nearestMergedPointAtTime(merged, want), { openTab: true });
     }
 
     overlay.addEventListener("mousemove", (ev) => {
-      showAtChartX(chartClientXToSvgX(svg, ev.clientX, w));
+      showSnap(snapAtPointer(ev.clientX, ev.clientY));
     });
-    overlay.addEventListener("mouseleave", hideHover);
     overlay.addEventListener("click", (ev) => {
-      pinAt(ev.clientX);
+      pinSnap(snapAtPointer(ev.clientX, ev.clientY));
     });
     wrap.addEventListener("ending-chart-jump", (ev) => {
       jumpToAt(ev.detail?.at);
     });
+
+    const restore = chartPinnedAt
+      ? nearestMergedPointAtTime(merged, parseChartDate(chartPinnedAt)?.getTime())
+      : merged[merged.length - 1];
+    if (restore) showSnap(restore, { persist: Boolean(chartPinnedAt) });
   }
 
   function renderMetricChartPanel(points, opts) {
@@ -1314,7 +1366,7 @@
     return `<div class="ending-dev-chart">
       ${renderPeakJumpBar(jumps)}
       ${renderChartMeta(meta)}
-      <div class="ending-dev-chart__readout" data-chart-readout hidden aria-live="polite">
+      <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
       <div class="ending-dev-chart__wrap" data-chart-wrap
@@ -1441,7 +1493,7 @@
         <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--viewers">시청자</span>
         <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--chat">채팅 화력</span>
       </div>
-      <div class="ending-dev-chart__readout" data-chart-readout hidden aria-live="polite">
+      <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
       <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1"
