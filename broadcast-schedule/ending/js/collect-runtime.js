@@ -132,6 +132,30 @@
       return `${base()}${normalized}`;
     }
 
+    function redirectOauthNextIfNeeded() {
+      try {
+        const next = String(sessionStorage.getItem(OAUTH_NEXT_KEY) || "").trim();
+        if (!next || next === "collector") {
+          if (next === "collector") sessionStorage.removeItem(OAUTH_NEXT_KEY);
+          return false;
+        }
+        const b = base();
+        let target = "";
+        if (next === "diary") target = `${b}/diary/`;
+        else if (next === "obs") target = `${b}/obs?obs=1`;
+        else if (next === "live_data") target = `${b}/live_data`;
+        else return false;
+        sessionStorage.removeItem(OAUTH_NEXT_KEY);
+        const here = String(location.pathname || "").replace(/\/+$/, "") || "/";
+        const there = String(new URL(target, location.origin).pathname || "").replace(/\/+$/, "") || "/";
+        if (here === there) return false;
+        location.replace(target);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
     function hasToken() {
       return Boolean(localStorage.getItem(TOKEN_KEY) || "");
     }
@@ -1337,6 +1361,7 @@
         );
         history.replaceState({}, "", url.toString());
         log("oauth ok");
+        redirectOauthNextIfNeeded();
         return true;
       } catch (err) {
         log(`oauth fail: ${errText(err)}`);
