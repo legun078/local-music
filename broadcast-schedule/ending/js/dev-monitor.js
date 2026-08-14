@@ -4,6 +4,8 @@
   const isMeMonitor = () => MONITOR_MODE === "me";
   const base = () => window.CREDITS_BASE || "";
   const POLL_MS = 5000;
+  /** VOD 다시보기: 차트 분 버킷(00초)보다 앞에서 재생해 맥락을 보여준다. */
+  const REPLAY_SEEK_LEAD_SEC = 10;
 
   const els = {
     gate: document.getElementById("dev-gate"),
@@ -1061,7 +1063,8 @@
     const startMs = parseChartDate(startedAt)?.getTime();
     const atMs = parseChartDate(at)?.getTime();
     if (!startMs || !atMs) return null;
-    const offsetSec = Math.max(0, Math.floor((atMs - startMs) / 1000));
+    const rawOffsetSec = Math.max(0, Math.floor((atMs - startMs) / 1000));
+    const offsetSec = Math.max(0, rawOffsetSec - REPLAY_SEEK_LEAD_SEC);
     const offsetLabel = formatOffsetSec(offsetSec);
     if (ctx.active && broadNo) {
       return {
