@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex,nofollow" />
   <meta name="theme-color" content="#F4F7FB" />
-  <title>엔딩 · 개발자 모니터</title>
+  <title>실시간 데이터</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -40,8 +40,8 @@
       <div class="ending-dev-bar__brand">
         <span class="ending-dev-bar__mark" aria-hidden="true"></span>
         <div>
-          <p class="ending-dev-bar__kicker">ENDING · READ ONLY</p>
-          <h1 class="ending-dev-bar__title">개발자 모니터</h1>
+          <p class="ending-dev-bar__kicker">SIRIAN-CAL</p>
+          <h1 class="ending-dev-bar__title">실시간 데이터</h1>
         </div>
       </div>
       <nav class="ending-dev-bar__nav" aria-label="엔딩 메뉴">
@@ -68,36 +68,37 @@
     </section>
 
     <div id="dev-app" class="ending-dev-app" hidden>
-      <div class="ending-dev-tabs" role="tablist" aria-label="계정 선택">
-        <button
-          type="button"
-          class="ending-dev-tab"
-          role="tab"
-          id="tab-sirian"
-          aria-selected="true"
-          aria-controls="panel-account"
-          data-tab="sirian"
-        >
-          <span class="ending-dev-tab__label">시리안</span>
-          <code class="ending-dev-tab__id" id="tab-sirian-id">sirianrain</code>
-          <span class="ending-dev-tab__dot" id="tab-sirian-dot" hidden></span>
-        </button>
-        <button
-          type="button"
-          class="ending-dev-tab"
-          role="tab"
-          id="tab-me"
-          aria-selected="false"
-          aria-controls="panel-account"
-          data-tab="me"
-        >
-          <span class="ending-dev-tab__label">내 계정</span>
-          <code class="ending-dev-tab__id" id="tab-me-id">—</code>
-          <span class="ending-dev-tab__dot" id="tab-me-dot" hidden></span>
-        </button>
-      </div>
-
-      <section class="ending-dev-hero" id="dev-strip" aria-label="실시간 요약"></section>
+      <section class="ending-dev-overview" aria-label="채널과 연결 상태">
+        <div class="ending-dev-tabs" role="tablist" aria-label="채널 선택">
+          <button
+            type="button"
+            class="ending-dev-tab"
+            role="tab"
+            id="tab-sirian"
+            aria-selected="true"
+            aria-controls="panel-account"
+            data-tab="sirian"
+          >
+            <span class="ending-dev-tab__label">시리안</span>
+            <code class="ending-dev-tab__id" id="tab-sirian-id">sirianrain</code>
+            <span class="ending-dev-tab__dot" id="tab-sirian-dot" hidden></span>
+          </button>
+          <button
+            type="button"
+            class="ending-dev-tab"
+            role="tab"
+            id="tab-me"
+            aria-selected="false"
+            aria-controls="panel-account"
+            data-tab="me"
+          >
+            <span class="ending-dev-tab__label">내 계정</span>
+            <code class="ending-dev-tab__id" id="tab-me-id">—</code>
+            <span class="ending-dev-tab__dot" id="tab-me-dot" hidden></span>
+          </button>
+        </div>
+        <section class="ending-dev-hero" id="dev-strip" aria-label="연결 상태"></section>
+      </section>
 
       <article class="ending-dev-card ending-dev-panel is-idle" id="panel-account" role="tabpanel">
         <header class="ending-dev-card__head">

@@ -261,45 +261,25 @@
 
   function renderFlags(el, live) {
     if (!el) return;
-    const obsPhase = live?.clients?.obs?.phase || "";
-    const tabPhase = live?.clients?.collector?.phase || "";
     const ingestOn = Boolean(live?.ingestActive);
-    const ingestSrc = ingestLabel(live);
     const authFail = Boolean(live?.ingestAuthFailRecent);
-    el.innerHTML = [
-      pill("실제 수집", ingestOn, authFail && !ingestOn ? "is-warn" : ""),
-      pill("세션", Boolean(live?.active)),
-      pill("Chat SDK", Boolean(live?.chatSdkConnected)),
-      pill("수집 구간", Boolean(live?.collectorOpen)),
-      pill(
-        obsPhase ? `OBS · ${obsPhase}` : "OBS 브라우저",
-        false,
-        live?.obsBrowserActive ? "is-present" : ""
-      ),
-      pill(
-        tabPhase ? `수집기 · ${tabPhase}` : "수집기 탭",
-        false,
-        live?.collectorTabActive ? "is-present" : ""
-      ),
-      authFail && !ingestOn
-        ? pill(ingestSrc ? `인증 실패 · ${ingestSrc}` : "인증 실패", false, "is-warn")
-        : "",
-      (() => {
-        const ssapi = normalizeSsapiAssist(devLiveExtras(live?.collected)?.ssapi || lastData?.ssapi);
-        if (ssapi.connected) return pill("SSAPI", true);
-        if (ssapi.lastError) return pill(`SSAPI · ${ssapi.lastError}`, false, "is-warn");
-        return pill("SSAPI", false);
-      })(),
-    ]
-      .filter(Boolean)
-      .join("");
+    const ssapi = normalizeSsapiAssist(devLiveExtras(live?.collected)?.ssapi || lastData?.ssapi);
+    const items = [
+      ingestOn ? pill("수집 중", true) : "",
+      authFail && !ingestOn ? pill("인증 실패", false, "is-warn") : "",
+      live?.obsBrowserActive ? pill("OBS", false, "is-present") : "",
+      live?.collectorTabActive ? pill("수집기", false, "is-present") : "",
+      ssapi.connected ? pill("SSAPI", true) : ssapi.lastError ? pill("SSAPI", false, "is-warn") : "",
+    ].filter(Boolean);
+    el.innerHTML = items.join("");
+    el.hidden = items.length === 0;
   }
 
   function renderSegments(el, segs) {
     if (!el) return;
     const rows = Array.isArray(segs) ? segs.slice(-5).reverse() : [];
     if (!rows.length) {
-      el.innerHTML = `<p class="ending-dev-empty">수집 구간 기록 없음</p>`;
+      el.innerHTML = "";
       return;
     }
     el.innerHTML = `
@@ -2158,56 +2138,23 @@
     const liveIngest = Boolean(sess.ingestActive);
     const lastAt = sess.lastIngestAt || "";
     const lastAge = sess.lastIngestAgeSec;
-    const boundSid = String((data.activeBound || {}).stationId || "").trim();
-    const thisSid = String(acc.stationId || "").trim();
-    const boundHere = Boolean(boundSid && thisSid && boundSid === thisSid);
-    const statusLabel = liveIngest ? "INGEST ON" : sess.ingestAuthFailRecent ? "AUTH FAIL" : "STANDBY";
+    const authFail = Boolean(sess.ingestAuthFailRecent);
+    const collectLabel = liveIngest ? "수집 중" : authFail ? "인증 실패" : "대기";
+    const collectClass = liveIngest ? "is-live" : authFail ? "is-warn" : "";
+    const ssapi = normalizeSsapiAssist(data.ssapi || devLiveExtras(sess.collected)?.ssapi);
+    const ssapiLabel = ssapi.connected ? "SSAPI 연결" : ssapi.lastError ? "SSAPI 오류" : "SSAPI";
+    const recent = lastAt ? fmtAge(lastAge) || fmtTime(lastAt) : "";
     els.strip.innerHTML = `
-      <div class="ending-dev-chip ending-dev-chip--status ${liveIngest ? "is-live" : ""}">
-        <p class="ending-dev-chip__label">실제 수집 · ${esc(acc.label)}</p>
-        <p class="ending-dev-chip__value">${esc(statusLabel)}</p>
-        <span class="ending-dev-chip__pulse" aria-hidden="true"></span>
+      <div class="ending-dev-status ${collectClass}">
+        <span class="ending-dev-status__dot" aria-hidden="true"></span>
+        <span>${esc(collectLabel)}</span>
+        ${recent ? `<span class="ending-dev-status__sub">${esc(recent)}</span>` : ""}
       </div>
-      <div class="ending-dev-chip">
-        <p class="ending-dev-chip__label">마지막 수집</p>
-        <p class="ending-dev-chip__value ending-dev-chip__value--sm">${
-          lastAt
-            ? `${esc(fmtTime(lastAt))}${
-                fmtAge(lastAge)
-                  ? `<span class="ending-dev-chip__sub">${esc(fmtAge(lastAge))}${
-                      ingestLabel(sess) ? ` · ${esc(ingestLabel(sess))}` : ""
-                    }</span>`
-                  : ""
-              }`
-            : "—"
-        }</p>
-      </div>
-      <div class="ending-dev-chip">
-        <p class="ending-dev-chip__label">서버 바인드</p>
-        <p class="ending-dev-chip__value ending-dev-chip__value--sm">${
-          boundHere ? "이 계정" : boundSid ? `<code>${esc(boundSid)}</code>` : "—"
-        }<span class="ending-dev-chip__sub">${boundHere ? "활성 포인터" : "다른 계정/없음"}</span></p>
-      </div>
-      <div class="ending-dev-chip">
-        <p class="ending-dev-chip__label">채널 ID</p>
-        <p class="ending-dev-chip__value"><code>${esc(thisSid || "—")}</code></p>
-      </div>
-      ${(() => {
-        const ssapi = normalizeSsapiAssist(data.ssapi || devLiveExtras(sess.collected)?.ssapi);
-        const on = ssapi.connected;
-        const label = on ? "연결" : ssapi.lastError ? "오류" : "대기";
-        return `<div class="ending-dev-chip${on ? " is-live" : ""}">
-          <p class="ending-dev-chip__label">SSAPI</p>
-          <p class="ending-dev-chip__value">${esc(label)}<span class="ending-dev-chip__sub">${esc(
-            [
-              ssapi.eventCount ? `${ssapi.eventCount}건` : "수신 없음",
-              ssapi.lastTitle || "",
-            ]
-              .filter(Boolean)
-              .join(" · ") || "보조 수집"
-          )}</span></p>
-        </div>`;
-      })()}`;
+      <div class="ending-dev-status ${ssapi.connected ? "is-live" : ssapi.lastError ? "is-warn" : ""}">
+        <span class="ending-dev-status__dot" aria-hidden="true"></span>
+        <span>${esc(ssapiLabel)}</span>
+        ${ssapi.eventCount ? `<span class="ending-dev-status__sub">${esc(fmtNum(ssapi.eventCount))}건</span>` : ""}
+      </div>`;
   }
 
   function renderAccount(data) {
@@ -2217,9 +2164,9 @@
     const collected = sess.collected || {};
 
     if (els.label) els.label.textContent = acc.label;
-    if (els.title) els.title.textContent = acc.stationId;
+    if (els.title) els.title.textContent = info.title || sess.title || "방송 정보 없음";
     if (els.broadcast) {
-      els.broadcast.textContent = info.title || sess.title || "방송 정보 없음";
+      els.broadcast.textContent = acc.stationId || "";
     }
     if (els.meta) {
       els.meta.textContent = acc.meta || (sess.updatedAt ? `세션 갱신 ${fmtTime(sess.updatedAt)}` : "—");
@@ -2260,8 +2207,6 @@
     setPanelStatus(acc);
     renderFlags(els.flags, sess);
     renderStats(els.stats, [
-      ["실제 수집", viewMode === "history" ? "—" : sess.ingestActive ? "ON" : "OFF"],
-      ["마지막 수집", viewMode === "history" ? "아카이브" : ingestStatusText(sess)],
       ["채팅", `${fmtNum(info.chatters || collected.counts?.chatters || sess.chatterCount)}명 · ${fmtNum(info.chatCount || collected.counts?.chatCount || sess.chatCount)}회`],
       ["별풍", fmtNum(info.balloonTotal || collected.counts?.balloonTotal || sess.balloonTotal)],
       ["시청", `현재 ${fmtNum(sess.lastViewerCount || collected.counts?.lastViewerCount)} · 피크 ${fmtNum(info.peakViewers || sess.peakViewers)}`],
