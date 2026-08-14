@@ -1673,12 +1673,17 @@ html.ending-oauth-busy body::before {
   height: 176px;
   overflow: hidden;
   overscroll-behavior-x: contain;
+  background: #fff;
+  isolation: isolate;
 }
 
 .ending-dev-chart__axis {
   flex: 0 0 auto;
   height: 176px;
   overflow: hidden;
+  background: #fff;
+  position: relative;
+  z-index: 2;
 }
 
 .ending-dev-chart__axis--left {
@@ -1707,6 +1712,8 @@ html.ending-oauth-busy body::before {
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
+  background: #fff;
+  contain: paint;
 }
 
 .ending-dev-chart__viewport {

@@ -621,8 +621,165 @@
     } catch (_) {
       /* ignore */
     }
-    if (prev === next) return;
+    if (prev === next) return false;
     resetChartViewToFit();
+    return true;
+  }
+
+  function captureChartPlotPan(root) {
+    const scroller = root?.querySelector?.("[data-chart-plot-scroll]");
+    if (!scroller) return null;
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    if (max <= 0) return { scrollLeft: 0, pan: 0 };
+    return { scrollLeft: scroller.scrollLeft, pan: scroller.scrollLeft / max };
+  }
+
+  function restoreChartPlotPan(root, saved) {
+    if (!saved || !root) return;
+    const scroller = root.querySelector("[data-chart-plot-scroll]");
+    if (!scroller) return;
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    if (max <= 0) {
+      scroller.scrollLeft = 0;
+      return;
+    }
+    const target = Number.isFinite(Number(saved.pan))
+      ? Math.round(Number(saved.pan) * max)
+      : Number(saved.scrollLeft) || 0;
+    scroller.scrollLeft = Math.max(0, Math.min(max, target));
+  }
+
+  function chartModeMatchesDom(mode, chartEl) {
+    if (!chartEl) return false;
+    const dual = chartEl.classList.contains("ending-dev-chart--dual");
+    if (mode === "both") return dual;
+    return mode === "viewers" || mode === "chat" ? !dual : false;
+  }
+
+  /** 스크롤·축 레이아웃은 유지하고 SVG·툴바만 갱신한다. */
+  function patchMetricsChartInPlace(root, collected, mode) {
+    const chart = root?.querySelector?.(".ending-dev-chart");
+    if (!chart || !chartModeMatchesDom(mode, chart)) return null;
+    const savedPan = captureChartPlotPan(root);
+    const wrap = chart.querySelector("[data-chart-wrap]");
+    if (!wrap) return null;
+    const dual = mode === "both";
+    const { plotW } = chartRenderPlotMetrics(dual);
+    if (String(wrap.dataset.chartWidth || "") !== String(plotW)) return null;
+
+    const ctx = metricsChartContext(collected);
+    const rendered = renderMetricsChartPanel(ctx.metricsSeries, ctx.counts, ctx.replay, mode);
+    const holder = document.createElement("div");
+    holder.innerHTML = rendered.html;
+    const fresh = holder.querySelector(".ending-dev-chart");
+    const freshWrap = fresh?.querySelector?.("[data-chart-wrap]");
+    const freshStage = fresh?.querySelector?.(".ending-dev-chart__stage");
+    const stage = chart.querySelector(".ending-dev-chart__stage");
+    if (!fresh || !freshWrap || !freshStage || !stage) return null;
+    if (String(freshWrap.dataset.chartWidth || "") !== String(wrap.dataset.chartWidth)) return null;
+
+    const freshToolbar = fresh.querySelector(".ending-dev-chart__toolbar");
+    const toolbar = chart.querySelector(".ending-dev-chart__toolbar");
+    if (freshToolbar && toolbar) toolbar.replaceWith(freshToolbar);
+
+    const freshZoom = fresh.querySelector(".ending-dev-chart__zoom");
+    const zoom = chart.querySelector(".ending-dev-chart__zoom");
+    if (freshZoom && zoom) zoom.replaceWith(freshZoom);
+
+    const axisLeft = stage.querySelector(".ending-dev-chart__axis--left");
+    const freshAxisLeft = freshStage.querySelector(".ending-dev-chart__axis--left");
+    if (axisLeft && freshAxisLeft) axisLeft.innerHTML = freshAxisLeft.innerHTML;
+
+    const axisRight = stage.querySelector(".ending-dev-chart__axis--right");
+    const freshAxisRight = freshStage.querySelector(".ending-dev-chart__axis--right");
+    if (axisRight && freshAxisRight) axisRight.innerHTML = freshAxisRight.innerHTML;
+
+    const svg = wrap.querySelector("[data-chart-svg]");
+    const freshSvg = freshWrap.querySelector("[data-chart-svg]");
+    if (svg && freshSvg) svg.innerHTML = freshSvg.innerHTML;
+
+    wrap.dataset.chartFullMin = freshWrap.dataset.chartFullMin;
+    wrap.dataset.chartFullMax = freshWrap.dataset.chartFullMax;
+
+    restoreChartPlotPan(root, savedPan);
+    return rendered.bind || null;
+  }
+
+  function patchOverviewPanelAux(panel, cats, collected) {
+    const metricsCat = (Array.isArray(cats) ? cats : []).find((c) => c.id === "metricsChart") || {};
+    const counts = metricsCat.counts || (collected || {}).counts || {};
+    const rankCats = (Array.isArray(cats) ? cats : []).filter((c) => c.id !== "metricsChart");
+    const readyCats = rankCats.filter((c) => categoryHasData(c));
+    const limit = dataLimit > 0 ? dataLimit : 0;
+    const totalItems = readyCats.reduce(
+      (n, c) => n + Math.max(Number(c.count || 0), c.items?.length || 0),
+      0
+    );
+
+    const meta = panel.querySelector(".ending-dev-overview-panel__meta");
+    if (meta) {
+      meta.textContent = readyCats.length
+        ? `${readyCats.length}개 영역 · ${fmtNum(totalItems)}건`
+        : "데이터 없음";
+    }
+
+    const digest = panel.querySelector(".ending-dev-digest");
+    if (digest) {
+      const statsEl = digest.nextElementSibling;
+      const statsHolder = document.createElement("div");
+      statsHolder.innerHTML = renderOverviewStats(counts);
+      const newStats = statsHolder.firstElementChild;
+      if (statsEl && newStats) statsEl.replaceWith(newStats);
+
+      const gridInside = digest.querySelector(".ending-dev-digest__grid");
+      if (gridInside) {
+        const titles = normalizeTitleHistory(metricsCat.titleHistory);
+        const titleN = titles.length;
+        gridInside.innerHTML = `<section class="ending-dev-digest__card">
+            <h5 class="ending-dev-digest__h">첫 채팅</h5>
+            ${renderFirstChatPanel(metricsCat.firstChat)}
+          </section>
+          <section class="ending-dev-digest__card">
+            <h5 class="ending-dev-digest__h">방제 변경${titleN ? ` · ${titleN}` : ""}</h5>
+            ${renderTitleHistoryPanel(titles)}
+          </section>`;
+      }
+    }
+
+    const cardsHtml = readyCats.map((c) => renderOverviewCategoryCard(c, limit)).join("");
+    const grid = panel.querySelector(".ending-dev-overview-grid");
+    if (grid) {
+      if (cardsHtml) grid.innerHTML = cardsHtml;
+      else grid.remove();
+    } else if (cardsHtml) {
+      const statsBlock = panel.querySelector(".ending-dev-overview-stats, .ending-dev-overview-stats--empty");
+      const gridHolder = document.createElement("div");
+      gridHolder.innerHTML = `<div class="ending-dev-overview-grid">${cardsHtml}</div>`;
+      const newGrid = gridHolder.firstElementChild;
+      if (statsBlock?.nextSibling) statsBlock.parentNode.insertBefore(newGrid, statsBlock.nextSibling);
+      else panel.appendChild(newGrid);
+    }
+
+    const pending = panel.querySelector(".ending-dev-overview-pending");
+    const pendingHtml = renderOverviewPending(rankCats);
+    if (pendingHtml) {
+      if (pending) pending.outerHTML = pendingHtml;
+      else panel.insertAdjacentHTML("beforeend", pendingHtml);
+    } else if (pending) {
+      pending.remove();
+    }
+  }
+
+  function tryPatchDataPanel(cats, collected) {
+    if (!els.dataBody) return false;
+    const panel = els.dataBody.querySelector(".ending-dev-overview-panel");
+    if (!panel) return false;
+    const bind = patchMetricsChartInPlace(els.dataBody, collected, metricsChartMode);
+    if (bind === null) return false;
+    patchOverviewPanelAux(panel, cats, collected);
+    if (bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, bind);
+    else if (bind) mountMetricChartInteraction(els.dataBody, bind);
+    return true;
   }
 
   function setChartPanLevel(pan, { rerender = false } = {}) {
@@ -725,8 +882,7 @@
 
   function onChartPanWheel(ev) {
     if (chartIsFitZoom()) return;
-    const chart = ev.target?.closest?.(".ending-dev-chart");
-    const scroller = chart?.querySelector?.("[data-chart-plot-scroll]");
+    const scroller = ev.target?.closest?.("[data-chart-plot-scroll]");
     if (!scroller) return;
     const dx = chartPanWheelDelta(ev);
     if (Math.abs(dx) < 0.5) return;
@@ -870,9 +1026,7 @@
       if (Math.abs(nextW - chartLayoutWidthCache) < 8) return;
       chartLayoutWidthCache = nextW;
       activeChartLayoutWidth = nextW;
-      scrollRestorePending = captureScrollState(els.dataBody);
-      const acc = resolveAccount(lastData, activeTab);
-      renderDataPanel(acc.sections, (acc.session || {}).collected || {});
+      refreshMetricsChartView();
     }, 120);
   }
 
@@ -2492,6 +2646,7 @@
 
   function refreshMetricsChartView() {
     if (!lastData || !els.dataBody) return false;
+    const savedPan = captureChartPlotPan(els.dataBody);
     const acc = resolveAccount(lastData, activeTab);
     const collected = (acc.session || {}).collected || {};
     const ctx = metricsChartContext(collected);
@@ -2508,7 +2663,8 @@
     oldChart.replaceWith(newChart);
     if (chart.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, chart.bind);
     else if (chart.bind) mountMetricChartInteraction(els.dataBody, chart.bind);
-    syncChartPlotScroll(els.dataBody);
+    if (savedPan) restoreChartPlotPan(els.dataBody, savedPan);
+    else syncChartPlotScroll(els.dataBody);
     return true;
   }
 
@@ -2881,7 +3037,7 @@
     const state = {
       windowY: window.scrollY || window.pageYOffset || 0,
       cards: {},
-      charts: [],
+      chartPan: captureChartPlotPan(root),
     };
     if (!root) return state;
     root.querySelectorAll(".ending-dev-overview-card").forEach((card) => {
@@ -2899,6 +3055,7 @@
       const body = card?.querySelector(".ending-dev-overview-card__body.is-scrollable");
       if (body && typeof top === "number") body.scrollTop = top;
     });
+    restoreChartPlotPan(root, state.chartPan);
     const y = Number(state.windowY);
     if (Number.isFinite(y) && y > 0) {
       requestAnimationFrame(() => {
@@ -2972,7 +3129,7 @@
   }
 
   function renderDataPanel(sections, collected) {
-    syncChartViewScope(collected);
+    const scopeChanged = syncChartViewScope(collected);
     const cats = buildDataCategories(sections, collected)
       .map((c, i) => ({ ...c, _ord: i }))
       .sort((a, b) => {
@@ -3000,7 +3157,12 @@
       return;
     }
 
+    if (!scopeChanged && tryPatchDataPanel(cats, collected)) {
+      return;
+    }
+
     const scrollState = scrollRestorePending || captureScrollState(els.dataBody);
+    const chartPan = scopeChanged ? null : scrollState.chartPan || captureChartPlotPan(els.dataBody);
     scrollRestorePending = null;
 
     activeChartLayoutWidth = chartLayoutWidth(els.dataBody);
@@ -3011,19 +3173,19 @@
     if (overview.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, overview.bind);
     else if (overview.bind) mountMetricChartInteraction(els.dataBody, overview.bind);
 
-    syncChartPlotScroll(els.dataBody);
+    if (scopeChanged) syncChartPlotScroll(els.dataBody);
+    else restoreChartPlotPan(els.dataBody, chartPan);
     restoreScrollState(els.dataBody, scrollState);
     requestAnimationFrame(() => {
       const fittedW = chartLayoutWidth(els.dataBody);
       if (Math.abs(fittedW - activeChartLayoutWidth) >= 8 && lastData) {
         activeChartLayoutWidth = fittedW;
         chartLayoutWidthCache = fittedW;
-        scrollRestorePending = scrollState;
-        const acc = resolveAccount(lastData, activeTab);
-        renderDataPanel(acc.sections, (acc.session || {}).collected || {});
+        refreshMetricsChartView();
         return;
       }
-      syncChartPlotScroll(els.dataBody);
+      if (scopeChanged) syncChartPlotScroll(els.dataBody);
+      else restoreChartPlotPan(els.dataBody, chartPan);
       restoreScrollState(els.dataBody, scrollState);
       persistScrollState(captureScrollState(els.dataBody));
     });
