@@ -590,7 +590,7 @@
   function renderFirstChatPanel(firstChat) {
     const fc = firstChat && typeof firstChat === "object" ? firstChat : null;
     if (!fc || !String(fc.name || "").trim()) {
-      return `<p class="ending-dev-empty ending-dev-data-empty">아직 첫 채팅이 기록되지 않았습니다.</p>`;
+      return `<p class="ending-dev-empty ending-dev-data-empty">없음</p>`;
     }
     const img = String(fc.imageUrl || "").trim();
     const msg = String(fc.message || fc.emoticonName || "").trim();
@@ -623,7 +623,7 @@
   function renderTitleHistoryPanel(rows) {
     const list = normalizeTitleHistory(rows);
     if (!list.length) {
-      return `<p class="ending-dev-empty ending-dev-data-empty">아직 방제 변경이 없습니다.</p>`;
+      return `<p class="ending-dev-empty ending-dev-data-empty">없음</p>`;
     }
     return `<ol class="ending-dev-titles">
       ${list
@@ -775,7 +775,7 @@
   function renderSsapiMissionList(rows) {
     const list = Array.isArray(rows) ? rows : [];
     if (!list.length) {
-      return `<p class="ending-dev-empty ending-dev-data-empty">아직 SSAPI 미션 이벤트가 없습니다. 도전·대결이 열리면 제목·시작·정산·결과가 여기에 쌓입니다.</p>`;
+      return `<p class="ending-dev-empty ending-dev-data-empty">미션 이벤트 없음</p>`;
     }
     return `<ol class="ending-dev-ssapi-list">
       ${list
@@ -806,7 +806,7 @@
   function renderSsapiDonationList(rows) {
     const list = Array.isArray(rows) ? rows : [];
     if (!list.length) {
-      return `<p class="ending-dev-empty ending-dev-data-empty">아직 SSAPI 별풍 메시지가 없습니다. 문구가 있는 일반 별풍이 오면 여기에 쌓입니다.</p>`;
+      return `<p class="ending-dev-empty ending-dev-data-empty">별풍 메시지 없음</p>`;
     }
     return `<ol class="ending-dev-notes ending-dev-notes--ssapi">
       ${list
@@ -844,7 +844,7 @@
   function renderMissionRunsPanel(rows) {
     const list = normalizeMissionRuns(rows);
     if (!list.length) {
-      return `<p class="ending-dev-empty ending-dev-data-empty">아직 미션 후원이 없습니다. 도전·대결 미션이 열리면 내용과 성공·실패·보류가 여기에 쌓입니다.</p>`;
+      return `<p class="ending-dev-empty ending-dev-data-empty">미션 없음</p>`;
     }
     return `<ol class="ending-dev-missions">
       ${list
@@ -919,12 +919,20 @@
     el.setAttribute("hidden", "");
   }
 
-  function chartTipIdleHtml() {
-    return `<span class="ending-dev-chart__tip-idle">마우스를 올리면 시점 · 수치가 표시됩니다</span>`;
-  }
-
   function chartTipEl(wrap) {
     return wrap?.closest?.(".ending-dev-chart")?.querySelector?.("[data-chart-tip]") || null;
+  }
+
+  function setChartTipHtml(wrap, html) {
+    const tip = chartTipEl(wrap);
+    const box = wrap?.closest?.(".ending-dev-chart")?.querySelector?.("[data-chart-readout]");
+    if (tip) tip.innerHTML = html || "";
+    if (box) box.hidden = !html;
+  }
+
+  function renderChartMeta(text) {
+    const t = String(text || "").trim();
+    return t ? `<p class="ending-dev-chart__meta">${esc(t)}</p>` : "";
   }
 
   function chartXToTimeMs(chartX, pad, w, minMs, maxMs) {
@@ -1014,7 +1022,7 @@
         offsetSec,
         offsetLabel,
         primaryUrl: `https://play.sooplive.co.kr/${encodeURIComponent(sid)}/${encodeURIComponent(broadNo)}`,
-        note: "라이브 중 — 다시보기 구간 이동은 방종 후 가능합니다",
+        note: "",
         canSeek: false,
       };
     }
@@ -1026,7 +1034,7 @@
         offsetLabel,
         primaryUrl: `https://vod.sooplive.com/player/${enc}?${qs}`,
         fallbackUrl: `https://vod.sooplive.co.kr/player/${enc}?${qs}`,
-        note: "다시보기 플레이어에서 해당 시점으로 이동합니다",
+        note: "",
         canSeek: true,
       };
     }
@@ -1035,9 +1043,7 @@
         offsetSec,
         offsetLabel,
         primaryUrl: `https://www.sooplive.co.kr/station/${encodeURIComponent(sid)}/vods/replay`,
-        note: broadNo
-          ? "다시보기 VOD 처리 중이면 채널 VOD 목록에서 찾아주세요"
-          : "방송 번호가 없어 채널 VOD 목록으로 이동합니다",
+        note: "",
         canSeek: false,
       };
     }
@@ -1065,7 +1071,7 @@
       replayMeta.textContent =
         typeof summaryText === "function" ? summaryText(links) : String(summaryText || "");
       replayLink.href = links.primaryUrl;
-      replayLink.textContent = links.canSeek ? "다시보기에서 이 시점 보기" : "SOOP 방송 열기";
+      replayLink.textContent = links.canSeek ? "다시보기" : "방송 열기";
     }
     if (openTab) {
       window.open(links.primaryUrl, "_blank", "noopener,noreferrer");
@@ -1102,11 +1108,12 @@
       const hit = nearestSeriesPointAtChartX(points, chartX, xAt);
       if (!hit) return;
       const links = replayLinksForPoint(config.replay, hit.at);
-      if (tip) {
-        tip.innerHTML = `<strong>${esc(chartFullLabel(hit.at))}</strong><span>${esc(
-          valueFmt(hit.v)
-        )}</span>${links ? `<span class="ending-dev-chart__tip-sub">시작 + ${esc(links.offsetLabel)}</span>` : ""}`;
-      }
+      setChartTipHtml(
+        wrap,
+        `<strong>${esc(chartFullLabel(hit.at))}</strong><span>${esc(valueFmt(hit.v))}</span>${
+          links ? `<span class="ending-dev-chart__tip-sub">+ ${esc(links.offsetLabel)}</span>` : ""
+        }`
+      );
       const x = hit.chartX;
       if (cursor) {
         showChartCursorLine(cursor, x, pad.t, pad.t + innerH);
@@ -1123,7 +1130,7 @@
     }
 
     function hideHover() {
-      if (tip) tip.innerHTML = chartTipIdleHtml();
+      setChartTipHtml(wrap, "");
       if (cursor) hideChartCursorLine(cursor);
       if (marker) marker.hidden = true;
       delete wrap.dataset.hoverAt;
@@ -1143,9 +1150,7 @@
         config.replay,
         hit.at,
         (links) =>
-          `${chartFullLabel(hit.at)} · ${valueFmt(hit.v)} · 시작 + ${links.offsetLabel}${
-            links.note ? ` · ${links.note}` : ""
-          }`,
+          `${chartFullLabel(hit.at)} · ${valueFmt(hit.v)} · + ${links.offsetLabel}`,
         { openTab: true }
       );
     }
@@ -1225,11 +1230,12 @@
           `<span class="ending-dev-chart__tip-row ending-dev-chart__tip-row--chat">화력 ${esc(fmtNum(Math.round(chatV)))}회/분</span>`
         );
       }
-      if (tip) {
-        tip.innerHTML = `<strong>${esc(chartFullLabel(snapAt))}</strong>${rows.join("")}${
-          links ? `<span class="ending-dev-chart__tip-sub">시작 + ${esc(links.offsetLabel)}</span>` : ""
-        }`;
-      }
+      setChartTipHtml(
+        wrap,
+        `<strong>${esc(chartFullLabel(snapAt))}</strong>${rows.join("")}${
+          links ? `<span class="ending-dev-chart__tip-sub">+ ${esc(links.offsetLabel)}</span>` : ""
+        }`
+      );
       if (cursor) {
         showChartCursorLine(cursor, x, pad.t, pad.t + innerH);
       }
@@ -1255,7 +1261,7 @@
     }
 
     function hideHover() {
-      if (tip) tip.innerHTML = chartTipIdleHtml();
+      setChartTipHtml(wrap, "");
       if (cursor) hideChartCursorLine(cursor);
       if (markerViewers) markerViewers.hidden = true;
       if (markerChats) markerChats.hidden = true;
@@ -1278,9 +1284,7 @@
           if (snap.chats != null && Number.isFinite(Number(snap.chats))) {
             parts.push(`화력 ${fmtNum(Math.round(snap.chats))}회/분`);
           }
-          return `${chartFullLabel(snapAt)} · ${parts.join(" · ")} · 시작 + ${links.offsetLabel}${
-            links.note ? ` · ${links.note}` : ""
-          }`;
+          return `${chartFullLabel(snapAt)} · ${parts.join(" · ")} · + ${links.offsetLabel}`;
         },
         { openTab: true }
       );
@@ -1352,9 +1356,9 @@
     const jumps = Array.isArray(o.jumps) ? o.jumps.filter(Boolean) : [];
     return `<div class="ending-dev-chart">
       ${renderPeakJumpBar(jumps)}
-      ${meta ? `<p class="ending-dev-chart__meta">${esc(meta)} · 호버로 시점 확인 · 클릭하면 다시보기</p>` : `<p class="ending-dev-chart__meta">호버로 시점 확인 · 클릭하면 다시보기</p>`}
-      <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
-        <div class="ending-dev-chart__tip" data-chart-tip>${chartTipIdleHtml()}</div>
+      ${renderChartMeta(meta)}
+      <div class="ending-dev-chart__readout" data-chart-readout hidden aria-live="polite">
+        <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
       <div class="ending-dev-chart__wrap" data-chart-wrap
         data-chart-width="${w}" data-chart-height="${h}"
@@ -1371,7 +1375,7 @@
       </div>
       <div class="ending-dev-chart__replay" data-chart-replay hidden>
         <p class="ending-dev-chart__replay-meta" data-replay-meta></p>
-        <a class="ending-dev-chart__replay-link" data-replay-link href="#" target="_blank" rel="noopener noreferrer">다시보기에서 이 시점 보기</a>
+        <a class="ending-dev-chart__replay-link" data-replay-link href="#" target="_blank" rel="noopener noreferrer">다시보기</a>
       </div>
     </div>`;
   }
@@ -1405,7 +1409,7 @@
     const merged = mergeMetricsTimeline(viewers, chats);
     if (!merged.length) {
       return {
-        html: `<p class="ending-dev-empty ending-dev-data-empty">시청자·채팅 화력 시계열이 아직 없습니다.</p>`,
+        html: `<p class="ending-dev-empty ending-dev-data-empty">시계열 없음</p>`,
         bind: null,
       };
     }
@@ -1415,7 +1419,7 @@
     const timeRange = chartTimeRangeFromPoints(viewers, chats);
     if (!timeRange) {
       return {
-        html: `<p class="ending-dev-empty ending-dev-data-empty">시청자·채팅 화력 시계열이 아직 없습니다.</p>`,
+        html: `<p class="ending-dev-empty ending-dev-data-empty">시계열 없음</p>`,
         bind: null,
       };
     }
@@ -1462,33 +1466,26 @@
         )}</text>`;
       })
       .join("");
-    const peak = Number(counts?.peakViewers) || 0;
     const lastViewers = Number(counts?.lastViewerCount) || viewers[viewers.length - 1]?.v || 0;
     const viewerPeak = resolveViewerPeak(viewers, counts);
     const chatPeak = resolveChatPeak(chats);
-    const peakChat = chatPeak?.v || 0;
-    const lastChat = chats.length ? chats[chats.length - 1].v : 0;
     const totalChat = Number(counts?.chatCount) || chats.reduce((n, p) => n + p.v, 0);
     const meta = [
-      peak ? `시청 최고 ${fmtNum(peak)}명` : "",
       lastViewers ? `현재 ${fmtNum(lastViewers)}명` : "",
-      peakChat ? `화력 피크 ${fmtNum(peakChat)}회/분` : "",
       totalChat ? `누적 ${fmtNum(totalChat)}회` : "",
-      viewers.length ? `시청 ${fmtNum(viewers.length)}분` : "",
-      chats.length ? `화력 ${fmtNum(chats.length)}분` : "",
     ]
       .filter(Boolean)
       .join(" · ");
     return {
       html: `<div class="ending-dev-chart ending-dev-chart--dual">
       ${renderPeakJumpBar([viewerPeak, chatPeak])}
-      <p class="ending-dev-chart__meta">${esc(meta)} · 호버로 시점 확인 · 클릭하면 다시보기</p>
+      ${renderChartMeta(meta)}
       <div class="ending-dev-chart__legend" aria-hidden="true">
         <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--viewers">시청자</span>
         <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--chat">채팅 화력</span>
       </div>
-      <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
-        <div class="ending-dev-chart__tip" data-chart-tip>${chartTipIdleHtml()}</div>
+      <div class="ending-dev-chart__readout" data-chart-readout hidden aria-live="polite">
+        <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
       <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1"
         data-chart-width="${w}" data-chart-height="${h}"
@@ -1507,7 +1504,7 @@
       </div>
       <div class="ending-dev-chart__replay" data-chart-replay hidden>
         <p class="ending-dev-chart__replay-meta" data-replay-meta></p>
-        <a class="ending-dev-chart__replay-link" data-replay-link href="#" target="_blank" rel="noopener noreferrer">다시보기에서 이 시점 보기</a>
+        <a class="ending-dev-chart__replay-link" data-replay-link href="#" target="_blank" rel="noopener noreferrer">다시보기</a>
       </div>
     </div>`,
       bind: {
@@ -1548,22 +1545,14 @@
 
   function renderViewersChartPanel(metricsSeries, counts, replay) {
     const points = seriesPoints(metricsSeries?.viewers);
-    const peak = Number(counts?.peakViewers) || 0;
     const last = Number(counts?.lastViewerCount) || points[points.length - 1]?.v || 0;
     const viewerPeak = resolveViewerPeak(points, counts);
     return {
       html: renderMetricChartPanel(points, {
-        emptyMsg: "시청자 시계열이 아직 없습니다. 라이브 폴링이 켜진 뒤 분 단위로 쌓입니다.",
+        emptyMsg: "시청자 시계열 없음",
         ariaLabel: "시청자 추이",
         jumps: [viewerPeak],
-        meta: () =>
-          [
-            peak ? `최고 ${fmtNum(peak)}명` : "",
-            last ? `현재 ${fmtNum(last)}명` : "",
-            points.length ? `${fmtNum(points.length)}분` : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
+        meta: () => (last ? `현재 ${fmtNum(last)}명` : ""),
       }),
       bind: {
         points,
@@ -1577,26 +1566,16 @@
 
   function renderChatChartPanel(metricsSeries, counts, replay) {
     const points = seriesPoints(metricsSeries?.chats);
-    const peakMin = points.length ? Math.max(...points.map((p) => p.v)) : 0;
-    const lastMin = points.length ? points[points.length - 1].v : 0;
     const total = Number(counts?.chatCount) || points.reduce((n, p) => n + p.v, 0);
     const chatPeak = resolveChatPeak(points);
     return {
       html: renderMetricChartPanel(points, {
-        emptyMsg: "채팅 화력 시계열이 아직 없습니다. 방송 중 채팅이 수집되면 분 단위로 표시됩니다.",
+        emptyMsg: "화력 시계열 없음",
         ariaLabel: "채팅 화력 추이",
         lineColor: "#c45c26",
         areaColor: "rgba(196, 92, 38, 0.14)",
         jumps: [chatPeak],
-        meta: () =>
-          [
-            peakMin ? `피크 ${fmtNum(peakMin)}회/분` : "",
-            lastMin ? `최근 ${fmtNum(lastMin)}회/분` : "",
-            total ? `누적 ${fmtNum(total)}회` : "",
-            points.length ? `${fmtNum(points.length)}분` : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
+        meta: () => (total ? `누적 ${fmtNum(total)}회` : ""),
       }),
       bind: {
         points,
@@ -2275,7 +2254,7 @@
     } else if (ssapi.lastError) {
       setBadge(els.ssapiBadge, "SSAPI 오류", "is-warn");
     } else {
-      setBadge(els.ssapiBadge, "SSAPI 대기", "is-off");
+      setBadge(els.ssapiBadge, "SSAPI", "is-off");
     }
 
     setPanelStatus(acc);

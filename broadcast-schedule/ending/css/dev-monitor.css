@@ -1336,8 +1336,11 @@
 }
 
 .ending-dev-chart__readout {
-  min-height: 2.35rem;
   margin: 0.15rem 0 0.45rem;
+}
+
+.ending-dev-chart__readout[hidden] {
+  display: none;
 }
 
 .ending-dev-chart__tip {
