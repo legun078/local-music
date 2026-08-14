@@ -707,6 +707,7 @@
     const freshZoom = fresh.querySelector(".ending-dev-chart__zoom");
     const zoom = chart.querySelector(".ending-dev-chart__zoom");
     if (freshZoom && zoom) zoom.replaceWith(freshZoom);
+    else if (!freshZoom && zoom) zoom.remove();
 
     const svg = wrap.querySelector("[data-chart-svg]");
     const freshSvg = freshWrap.querySelector("[data-chart-svg]");
