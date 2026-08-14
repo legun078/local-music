@@ -621,16 +621,18 @@
     }
     const img = String(fc.imageUrl || "").trim();
     const msg = String(fc.message || fc.emoticonName || "").trim();
-    const body = img
-      ? `<img class="ending-dev-first-chat__emo" src="${esc(mediaUrl(img))}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
-      : msg
-        ? `<p class="ending-dev-first-chat__msg">“${esc(msg)}”</p>`
-        : "";
     const at = String(fc.atLabel || "").trim();
-    return `<div class="ending-dev-first-chat">
-      <p class="ending-dev-first-chat__name">${esc(fc.name)}</p>
-      ${body}
-      ${at ? `<p class="ending-dev-first-chat__at">${esc(at)}</p>` : ""}
+    const thumb = img
+      ? `<img class="ending-dev-first-chat__emo" src="${esc(mediaUrl(img))}" alt="" loading="lazy" referrerpolicy="no-referrer" />`
+      : "";
+    const text = !img && msg ? `<p class="ending-dev-first-chat__msg">“${esc(msg)}”</p>` : "";
+    return `<div class="ending-dev-first-chat ending-dev-first-chat--compact">
+      ${thumb}
+      <div class="ending-dev-first-chat__body">
+        <p class="ending-dev-first-chat__name">${esc(fc.name)}</p>
+        ${text}
+        ${at ? `<p class="ending-dev-first-chat__at">${esc(at)}</p>` : ""}
+      </div>
     </div>`;
   }
 
@@ -1993,26 +1995,41 @@
     if (cat.kind === "donationNotes") {
       const shown = sliceItemsForLimit(cat.items, limit);
       const notes = normalizeDonationNotes(cat.donationNotes).slice(0, limit > 0 ? limit : 5);
-      const list = renderDataList(shown);
+      const list = renderDataList(shown, { compact: true });
       const noteBlock =
         notes.length > 0
           ? `<div class="ending-dev-overview-card__notes">${renderDonationNotes(notes)}</div>`
           : "";
       return `${list}${noteBlock}`;
     }
-    return renderDataList(sliceItemsForLimit(cat.items, limit));
+    return renderDataList(sliceItemsForLimit(cat.items, limit), { compact: true });
+  }
+
+  function overviewCardSpan(cat) {
+    if (cat.kind === "ssapi" || cat.kind === "missionRuns") return 2;
+    if (cat.id === "emoticon") return 2;
+    if (cat.kind === "donationNotes") {
+      const n = (cat.items?.length || 0) + (cat.donationNotes?.length || 0);
+      return n > 4 ? 2 : 1;
+    }
+    return 1;
+  }
+
+  function overviewBodyScrollable(limit) {
+    return limit === 0 || limit > 10;
   }
 
   function renderOverviewCategoryCard(cat, limit) {
-    const wide = cat.kind === "ssapi" || cat.kind === "missionRuns" || cat.kind === "donationNotes";
+    const span = overviewCardSpan(cat);
     const countLabel =
       cat.count > 0 ? `${fmtNum(cat.count)}건` : cat.pending ? "대기" : "0건";
-    return `<article class="ending-dev-overview-card${wide ? " is-wide" : ""}" data-cat="${esc(cat.id)}">
+    const scrollable = overviewBodyScrollable(limit);
+    return `<article class="ending-dev-overview-card" data-span="${span}" data-cat="${esc(cat.id)}">
       <header class="ending-dev-overview-card__head">
         <h5 class="ending-dev-overview-card__title">${esc(cat.title)}</h5>
         <span class="ending-dev-overview-card__count">${esc(countLabel)}</span>
       </header>
-      <div class="ending-dev-overview-card__body">${renderOverviewCategoryBody(cat, limit)}</div>
+      <div class="ending-dev-overview-card__body${scrollable ? " is-scrollable" : ""}">${renderOverviewCategoryBody(cat, limit)}</div>
     </article>`;
   }
 
@@ -2070,13 +2087,15 @@
     };
   }
 
-  function renderDataList(items) {
+  function renderDataList(items, opts = {}) {
+    const compact = Boolean(opts.compact);
     const list = Array.isArray(items) ? items : [];
     if (!list.length) {
       return `<p class="ending-dev-empty ending-dev-data-empty">이 카테고리에 아직 데이터가 없습니다.</p>`;
     }
     const hasImg = list.some((row) => row.imageUrl);
-    return `<ol class="ending-dev-rank ending-dev-rank--lg${hasImg ? " ending-dev-rank--emo" : ""}">
+    const sizeCls = compact ? " ending-dev-rank--compact" : " ending-dev-rank--lg";
+    return `<ol class="ending-dev-rank${sizeCls}${hasImg ? " ending-dev-rank--emo" : ""}">
       ${list
         .map((row) => {
           const img = String(row.imageUrl || "").trim();
