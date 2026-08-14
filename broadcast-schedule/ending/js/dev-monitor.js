@@ -1,6 +1,7 @@
 (() => {
   const TOKEN_KEY = "ending_soop_access_token";
-  const TAB_KEY = "ending_dev_monitor_tab";
+  const MONITOR_MODE = window.ENDING_MONITOR_MODE === "me" ? "me" : "sirian";
+  const isMeMonitor = () => MONITOR_MODE === "me";
   const base = () => window.CREDITS_BASE || "";
   const POLL_MS = 5000;
 
@@ -12,17 +13,8 @@
     auto: document.getElementById("dev-auto"),
     refresh: document.getElementById("btn-dev-refresh"),
     strip: document.getElementById("dev-strip"),
-    tabSirian: document.getElementById("tab-sirian"),
-    tabMe: document.getElementById("tab-me"),
-    tabSirianId: document.getElementById("tab-sirian-id"),
-    tabMeId: document.getElementById("tab-me-id"),
-    tabSirianDot: document.getElementById("tab-sirian-dot"),
-    tabMeDot: document.getElementById("tab-me-dot"),
     panel: document.getElementById("panel-account"),
-    label: document.getElementById("acc-label"),
     title: document.getElementById("acc-title"),
-    badge: document.getElementById("acc-badge"),
-    ssapiBadge: document.getElementById("acc-ssapi-badge"),
     broadcast: document.getElementById("acc-broadcast"),
     meta: document.getElementById("acc-meta"),
     note: document.getElementById("acc-note"),
@@ -61,7 +53,7 @@
   let timer = null;
   let busy = false;
   let lastData = null;
-  let activeTab = "sirian";
+  let activeTab = MONITOR_MODE;
   let dataTabId = "";
   let dataLimit = 10;
   let metricsChartMode = "both";
@@ -73,12 +65,6 @@
   let historyListCache = [];
   let historyBusy = false;
 
-  try {
-    const saved = String(sessionStorage.getItem(TAB_KEY) || "").trim();
-    if (saved === "me" || saved === "sirian") activeTab = saved;
-  } catch (_) {
-    /* ignore */
-  }
   try {
     dataTabId = String(sessionStorage.getItem(DATA_TAB_KEY) || "").trim();
     if (dataTabId === "viewersChart") {
@@ -92,6 +78,9 @@
     }
   } catch (_) {
     /* ignore */
+  }
+  if (isMeMonitor() && dataTabId === "ssapi") {
+    dataTabId = "";
   }
   try {
     const modeRaw = String(sessionStorage.getItem(METRICS_CHART_MODE_KEY) || "").trim();
@@ -199,13 +188,6 @@
     return `${fmtTime(at)}${age ? ` (${age})` : ""}${src ? ` · ${src}` : ""}`;
   }
 
-  function setBadge(el, text, kind) {
-    if (!el) return;
-    el.textContent = text;
-    el.className = "ending-dev-badge";
-    if (kind) el.classList.add(kind);
-  }
-
   function renderStats(el, rows) {
     if (!el) return;
     el.innerHTML = rows
@@ -261,15 +243,10 @@
 
   function renderFlags(el, live) {
     if (!el) return;
-    const ingestOn = Boolean(live?.ingestActive);
-    const authFail = Boolean(live?.ingestAuthFailRecent);
-    const ssapi = normalizeSsapiAssist(devLiveExtras(live?.collected)?.ssapi || lastData?.ssapi);
+    // 수집·SSAPI는 상단 상태 줄에 있으므로, 여기선 켜진 접속만 표시
     const items = [
-      ingestOn ? pill("수집 중", true) : "",
-      authFail && !ingestOn ? pill("인증 실패", false, "is-warn") : "",
       live?.obsBrowserActive ? pill("OBS", false, "is-present") : "",
-      live?.collectorTabActive ? pill("수집기", false, "is-present") : "",
-      ssapi.connected ? pill("SSAPI", true) : ssapi.lastError ? pill("SSAPI", false, "is-warn") : "",
+      live?.collectorTabActive ? pill("수집기 탭", false, "is-present") : "",
     ].filter(Boolean);
     el.innerHTML = items.join("");
     el.hidden = items.length === 0;
@@ -1706,16 +1683,18 @@
         });
       }
 
-      const ssapi = normalizeSsapiAssist(extras.ssapi);
-      byId.set("ssapi", {
-        id: "ssapi",
-        title: dataTabTitle("ssapi"),
-        count: ssapi.eventCount,
-        pending: ssapi.eventCount === 0,
-        kind: "ssapi",
-        ssapi,
-        items: [],
-      });
+      if (!isMeMonitor()) {
+        const ssapi = normalizeSsapiAssist(extras.ssapi);
+        byId.set("ssapi", {
+          id: "ssapi",
+          title: dataTabTitle("ssapi"),
+          count: ssapi.eventCount,
+          pending: ssapi.eventCount === 0,
+          kind: "ssapi",
+          ssapi,
+          items: [],
+        });
+      }
     }
 
     const cats = [];
@@ -2113,15 +2092,7 @@
   }
 
   function setTabUi(tab) {
-    activeTab = tab === "me" ? "me" : "sirian";
-    const isSirian = activeTab === "sirian";
-    els.tabSirian?.setAttribute("aria-selected", isSirian ? "true" : "false");
-    els.tabMe?.setAttribute("aria-selected", isSirian ? "false" : "true");
-    try {
-      sessionStorage.setItem(TAB_KEY, activeTab);
-    } catch (_) {
-      /* ignore */
-    }
+    activeTab = isMeMonitor() ? "me" : tab === "me" ? "me" : "sirian";
   }
 
   function activeStationId(data) {
@@ -2141,20 +2112,31 @@
     const authFail = Boolean(sess.ingestAuthFailRecent);
     const collectLabel = liveIngest ? "수집 중" : authFail ? "인증 실패" : "대기";
     const collectClass = liveIngest ? "is-live" : authFail ? "is-warn" : "";
-    const ssapi = normalizeSsapiAssist(data.ssapi || devLiveExtras(sess.collected)?.ssapi);
-    const ssapiLabel = ssapi.connected ? "SSAPI 연결" : ssapi.lastError ? "SSAPI 오류" : "SSAPI";
+    const ssapi = isMeMonitor()
+      ? null
+      : normalizeSsapiAssist(data.ssapi || devLiveExtras(sess.collected)?.ssapi);
+    const ssapiLabel = ssapi
+      ? ssapi.connected
+        ? "SSAPI 연결"
+        : ssapi.lastError
+          ? "SSAPI 오류"
+          : "SSAPI"
+      : "";
     const recent = lastAt ? fmtAge(lastAge) || fmtTime(lastAt) : "";
+    const ssapiHtml = ssapi
+      ? `<div class="ending-dev-status ${ssapi.connected ? "is-live" : ssapi.lastError ? "is-warn" : ""}">
+        <span class="ending-dev-status__dot" aria-hidden="true"></span>
+        <span>${esc(ssapiLabel)}</span>
+        ${ssapi.eventCount ? `<span class="ending-dev-status__sub">${esc(fmtNum(ssapi.eventCount))}건</span>` : ""}
+      </div>`
+      : "";
     els.strip.innerHTML = `
       <div class="ending-dev-status ${collectClass}">
         <span class="ending-dev-status__dot" aria-hidden="true"></span>
         <span>${esc(collectLabel)}</span>
         ${recent ? `<span class="ending-dev-status__sub">${esc(recent)}</span>` : ""}
       </div>
-      <div class="ending-dev-status ${ssapi.connected ? "is-live" : ssapi.lastError ? "is-warn" : ""}">
-        <span class="ending-dev-status__dot" aria-hidden="true"></span>
-        <span>${esc(ssapiLabel)}</span>
-        ${ssapi.eventCount ? `<span class="ending-dev-status__sub">${esc(fmtNum(ssapi.eventCount))}건</span>` : ""}
-      </div>`;
+      ${ssapiHtml}`;
   }
 
   function renderAccount(data) {
@@ -2163,7 +2145,6 @@
     const info = acc.info || {};
     const collected = sess.collected || {};
 
-    if (els.label) els.label.textContent = acc.label;
     if (els.title) els.title.textContent = info.title || sess.title || "방송 정보 없음";
     if (els.broadcast) {
       els.broadcast.textContent = acc.stationId || "";
@@ -2183,46 +2164,17 @@
 
     setViewModeUi();
 
-    if (acc.source === "archive" || viewMode === "history") {
-      setBadge(els.badge, "아카이브", "is-archive");
-    } else if (sess.ingestActive) {
-      setBadge(els.badge, "수집 중", "is-on");
-    } else if (sess.ingestAuthFailRecent) {
-      setBadge(els.badge, "인증 실패", "is-warn");
-    } else if (sess.active || sess.collectorOpen || sess.chatSdkConnected) {
-      setBadge(els.badge, "세션만 유지", "is-off");
-    } else {
-      setBadge(els.badge, "대기", "is-off");
-    }
-
-    const ssapi = normalizeSsapiAssist(data.ssapi || devLiveExtras(collected)?.ssapi);
-    if (ssapi.connected) {
-      setBadge(els.ssapiBadge, "SSAPI 연결", "is-on");
-    } else if (ssapi.lastError) {
-      setBadge(els.ssapiBadge, "SSAPI 오류", "is-warn");
-    } else {
-      setBadge(els.ssapiBadge, "SSAPI", "is-off");
-    }
-
     setPanelStatus(acc);
     renderFlags(els.flags, sess);
     renderStats(els.stats, [
       ["채팅", `${fmtNum(info.chatters || collected.counts?.chatters || sess.chatterCount)}명 · ${fmtNum(info.chatCount || collected.counts?.chatCount || sess.chatCount)}회`],
       ["별풍", fmtNum(info.balloonTotal || collected.counts?.balloonTotal || sess.balloonTotal)],
-      ["시청", `현재 ${fmtNum(sess.lastViewerCount || collected.counts?.lastViewerCount)} · 피크 ${fmtNum(info.peakViewers || sess.peakViewers)}`],
       ["팬 / 구독", `팬 ${fmtNum(info.fanclubCount || collected.counts?.fanclubJoins)} · 구독 ${fmtNum(info.subscribeCount || collected.counts?.subscribers)} · 선물 ${fmtNum(collected.counts?.subscriptionGifts)}`],
     ]);
     renderPeakThumb(acc);
 
     renderDataPanel(acc.sections, collected);
     renderSegments(els.segments, viewMode === "history" ? [] : sess.collectorSegments);
-
-    if (els.tabSirianId) els.tabSirianId.textContent = data.sirianStationId || "sirianrain";
-    if (els.tabMeId) els.tabMeId.textContent = data.viewerStationId || "—";
-    const sirianOn = Boolean((data.sirian || {}).session?.ingestActive);
-    const meOn = Boolean((data.live || {}).ingestActive);
-    if (els.tabSirianDot) els.tabSirianDot.hidden = !sirianOn;
-    if (els.tabMeDot) els.tabMeDot.hidden = !meOn;
   }
 
   function paint(data, { animate = false } = {}) {
@@ -2286,21 +2238,6 @@
     }
   }
 
-  function onTabClick(tab) {
-    if (tab !== "me" && tab !== "sirian") return;
-    if (tab === activeTab) return;
-    setTabUi(tab);
-    historyPayload = null;
-    historyArchiveId = "";
-    if (viewMode === "history" && lastData) {
-      loadHistoryDates(lastData).then(() => loadHistoryList());
-    } else if (lastData) {
-      paint(lastData, { animate: true });
-    }
-  }
-
-  els.tabSirian?.addEventListener("click", () => onTabClick("sirian"));
-  els.tabMe?.addEventListener("click", () => onTabClick("me"));
   els.viewLive?.addEventListener("click", () => setViewMode("live"));
   els.viewHistory?.addEventListener("click", () => setViewMode("history"));
   els.historyDate?.addEventListener("change", () => {

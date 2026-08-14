@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex,nofollow" />
   <meta name="theme-color" content="#F4F7FB" />
-  <title>실시간 데이터</title>
+  <title>내 계정 테스트</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
@@ -19,7 +19,7 @@
       if (p === "/ending" || p.startsWith("/ending/")) return "/ending";
       return "";
     })();
-    window.ENDING_MONITOR_MODE = "sirian";
+    window.ENDING_MONITOR_MODE = "me";
     window.ENDING_CACHE_V = String(Date.now());
     (function () {
       var v = window.ENDING_CACHE_V;
@@ -35,21 +35,21 @@
     })();
   </script>
 </head>
-<body class="credits-collector-page ending-dev-page ending-dev-mode-sirian">
+<body class="credits-collector-page ending-dev-page ending-dev-mode-me">
   <div class="ending-dev-shell">
     <header class="ending-dev-bar">
       <div class="ending-dev-bar__brand">
         <span class="ending-dev-bar__mark" aria-hidden="true"></span>
         <div>
-          <p class="ending-dev-bar__kicker">시리안_레인 방송</p>
-          <h1 class="ending-dev-bar__title">실시간 데이터</h1>
+          <p class="ending-dev-bar__kicker">개발자 계정</p>
+          <h1 class="ending-dev-bar__title">내 계정 테스트</h1>
         </div>
       </div>
       <nav class="ending-dev-bar__nav" aria-label="엔딩 메뉴">
         <a href="./">수집기</a>
         <a href="/studio">스튜디오</a>
-        <a href="/dev" aria-current="page">실시간 데이터</a>
-        <a href="/dev/me">내 계정 테스트</a>
+        <a href="/dev">실시간 데이터</a>
+        <a href="/dev/me" aria-current="page">내 계정 테스트</a>
         <a href="diary" hidden aria-hidden="true" tabindex="-1">일기장</a>
       </nav>
       <div class="ending-dev-bar__tools">
@@ -71,6 +71,10 @@
     </section>
 
     <div id="dev-app" class="ending-dev-app" hidden>
+      <p class="ending-dev-page-lead">
+        민석 계정으로 수집기가 붙는지 확인하는 페이지입니다. 시리안 방송 수치는
+        <a href="/dev">실시간 데이터</a>에서 보세요.
+      </p>
       <section class="ending-dev-overview" aria-label="연결 상태">
         <section class="ending-dev-hero" id="dev-strip" aria-label="연결 상태"></section>
       </section>
@@ -79,6 +83,7 @@
         <header class="ending-dev-card__head">
           <div class="ending-dev-card__identity">
             <h2 class="ending-dev-card__title" id="acc-title">—</h2>
+            <p class="ending-dev-card__title-line" id="acc-broadcast">—</p>
             <p class="ending-dev-meta" id="acc-meta">—</p>
           </div>
           <div class="ending-dev-card__controls">

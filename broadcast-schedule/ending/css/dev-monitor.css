@@ -135,6 +135,29 @@
   color: var(--dev-blue);
 }
 
+.ending-dev-bar__nav a[aria-current="page"] {
+  background: var(--dev-blue-soft);
+  color: var(--dev-blue);
+}
+
+.ending-dev-page-lead {
+  margin: 0;
+  padding: 0.15rem 0.2rem 0.35rem;
+  color: var(--dev-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.ending-dev-page-lead a {
+  color: var(--dev-blue);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.ending-dev-page-lead a:hover {
+  text-decoration: underline;
+}
+
 .ending-dev-bar__tools {
   display: flex;
   align-items: center;
@@ -579,7 +602,7 @@
 .ending-dev-stats {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0.55rem;
 }
 

@@ -182,7 +182,7 @@ def _ending_soop_page_gate():
         if _ending_soop_cookie_station():
             return None
         return _ending_staff_html_forbidden()
-    if path in ("/dev", "/dev/"):
+    if path in ("/dev", "/dev/", "/dev/me", "/dev/me/"):
         sid = _ending_soop_cookie_station()
         if sid and _is_overlay_dev(sid):
             return None
@@ -2806,6 +2806,12 @@ def ending_studio():
 @app.route("/dev/")
 def ending_dev_monitor():
     return send_from_directory(ENDING_DIR, "dev.html")
+
+
+@app.route("/dev/me")
+@app.route("/dev/me/")
+def ending_dev_monitor_me():
+    return send_from_directory(ENDING_DIR, "me.html")
 
 
 @app.route("/diary")
