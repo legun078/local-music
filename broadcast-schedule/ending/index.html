@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#4a60a9" />
+  <title>방종 엔딩 크레딧 · 수집기</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonts-archive/NanumGothic/NanumGothic.css" />
+  <script>
+    window.CREDITS_BASE = (function () {
+      const p = location.pathname;
+      if (p === "/ending" || p.startsWith("/ending/")) return "/ending";
+      return "";
+    })();
+    (function () {
+      try {
+        var next = sessionStorage.getItem("ending_oauth_next") || "";
+        if (next !== "live_data") return;
+        var q = new URLSearchParams(location.search);
+        if (!(q.get("code") || q.get("authCode"))) return;
+        var base = window.CREDITS_BASE || "";
+        location.replace((base || "") + "/live_data" + location.search + location.hash);
+      } catch (_) {}
+    })();
+    window.ENDING_CACHE_V = String(Date.now());
+    (function () {
+      var v = window.ENDING_CACHE_V;
+      var prefix = window.CREDITS_BASE ? window.CREDITS_BASE + "/" : "";
+      var link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = prefix + "css/collector.css?v=" + v;
+      document.head.appendChild(link);
+    })();
+  </script>
+</head>
+<body class="credits-collector-page" data-phase="gate">
+  <div class="page ending-page">
+    <header class="ending-top panel">
+      <div class="ending-top__row">
+        <h1 class="ending-page-title">방종 엔딩 · 수집기</h1>
+        <div class="ending-top__links">
+          <a class="ending-home-link" href="dev" id="collector-dev-link" hidden>개발자 모니터</a>
+          <a class="ending-home-link" href="diary" hidden aria-hidden="true" tabindex="-1">방송 일기장</a>
+          <a class="ending-home-link" href="studio" target="_blank" rel="noopener noreferrer">오버레이 스튜디오</a>
+          <a class="ending-home-link" href="https://sirian-cal.com/" rel="noopener">일정으로</a>
+        </div>
+      </div>
+      <p class="ending-top__desc">
+        숲 로그인 후 이 탭을 <strong>방송 중 열어 두면</strong> 채팅·후원이 모입니다.
+        OBS에는 <strong>전용 오버레이 주소</strong>만 넣어 표시하세요 (기본은 수집 안 함).
+        멘트·페이지 on/off는 <strong>스튜디오</strong>에서 합니다.
+      </p>
+    </header>
+
+    <article class="panel ending-obs-guide" aria-label="OBS 오버레이 설정 안내">
+      <p class="ending-muted ending-obs-box__hint">
+        아래 <strong>오버레이 주소 복사</strong>로 받은 전용 URL을 OBS에 넣으세요.
+        주소의 <code>k</code> 값은 비밀번호처럼 다루고 외부에 공유하지 마세요.
+        해상도 <strong>960 × 1080</strong>. 수집은 이 탭에서 하고, OBS는 표시 전용입니다.
+        (비상 시 OBS에서도 수집: URL에 <code>&amp;collect=1</code>)
+      </p>
+    </article>
+
+    <section class="panel ending-gate" id="collector-auth-gate">
+      <h2 class="ending-section-title">숲 계정 연결</h2>
+      <p class="ending-muted" id="collector-auth-msg">
+        본인 숲 계정으로 로그인하면 그 방송의 엔딩을 만듭니다.
+      </p>
+      <button type="button" class="ending-btn" id="collector-login" disabled>준비 중…</button>
+      <pre class="ending-log" id="collector-gate-log" aria-live="polite" hidden></pre>
+    </section>
+
+    <section class="ending-main hidden" id="collector-main" hidden>
+      <article class="panel ending-user">
+        <img
+          class="ending-user__avatar"
+          id="collector-avatar"
+          src=""
+          alt=""
+          width="72"
+          height="72"
+          hidden
+        />
+        <div class="ending-user__avatar ending-user__avatar--fallback" id="collector-avatar-fallback" aria-hidden="true">?</div>
+        <div class="ending-user__meta">
+          <div class="ending-user__name-row">
+            <strong class="ending-user__nick" id="collector-nick">—</strong>
+            <span class="ending-badge" id="collector-status">대기</span>
+          </div>
+          <p class="ending-user__id">
+            채널 <span id="collector-station">—</span>
+          </p>
+          <p class="ending-user__extra ending-muted" id="collector-user-extra"></p>
+          <div class="ending-user__actions">
+            <button type="button" class="ending-btn ending-btn--sm" id="collector-retry" hidden>
+              다시 시도
+            </button>
+            <button type="button" class="ending-btn ending-btn--ghost ending-btn--sm" id="collector-logout">
+              로그아웃
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <div class="ending-grid">
+        <article class="panel ending-stat-card">
+          <span class="ending-stat-card__label">모은 이벤트</span>
+          <strong class="ending-stat-card__value" id="collector-event-count">0</strong>
+        </article>
+        <article class="panel ending-stat-card">
+          <span class="ending-stat-card__label">안내</span>
+          <p class="ending-stat-card__hint" id="collector-hint">
+            수집은 이 탭에서 합니다. OBS 전용 주소는 표시·재생용입니다.
+          </p>
+        </article>
+      </div>
+
+      <article class="panel ending-timeline" id="collector-timeline" aria-label="오늘의 방송 타임라인">
+        <div class="ending-timeline__head">
+          <h2 class="ending-section-title">오늘의 방송 타임라인</h2>
+          <span class="ending-muted" id="collector-timeline-day">—</span>
+        </div>
+        <div class="ending-daybar" id="collector-daybar">
+          <div class="ending-daybar__track" id="collector-daybar-track">
+            <div class="ending-daybar__live" id="collector-daybar-live" hidden></div>
+            <div class="ending-daybar__now" id="collector-daybar-now" title="지금"></div>
+          </div>
+          <div class="ending-daybar__hours" aria-hidden="true"></div>
+        </div>
+        <ul class="ending-timeline__list" id="collector-timeline-list"></ul>
+      </article>
+
+      <div class="panel ending-actions ending-actions--credits" role="group" aria-label="엔딩 크레딧 재생 제어">
+        <label class="ending-theme-pick" for="collector-theme">
+          <span class="ending-theme-pick__label">오버레이 테마</span>
+          <select id="collector-theme" aria-label="오버레이 테마">
+            <option value="report">홀로그램 · 투영</option>
+            <option value="reportProj">홀로그램 · 글래스</option>
+          </select>
+        </label>
+        <button type="button" class="ending-btn" id="collector-credits-play" title="엔딩 크레딧 한 사이클 재생">
+          크레딧 재생
+        </button>
+        <button type="button" class="ending-btn ending-btn--ghost" id="collector-credits-stop" title="엔딩 크레딧 종료 · 화면에서 숨김">
+          크레딧 종료
+        </button>
+        <button type="button" class="ending-btn ending-btn--ghost" id="collector-copy-obs" title="OBS 브라우저 소스용 실데이터 주소 복사">
+          오버레이 주소 복사
+        </button>
+        <a class="ending-btn ending-btn--ghost" id="link-studio" href="studio" target="_blank" rel="noopener noreferrer">오버레이 스튜디오</a>
+        <button type="button" class="ending-btn ending-btn--ghost" id="collector-disconnect" disabled>수집 일시 중지</button>
+      </div>
+
+      <details class="panel ending-log-wrap">
+        <summary>활동 로그</summary>
+        <pre class="ending-log" id="collector-log" aria-live="polite"></pre>
+      </details>
+    </section>
+  </div>
+
+  <!-- 수집기 전용 · OBS 해상도 일회 안내 (다시 보지 않기) -->
+  <div
+    id="collector-obs-size-notice"
+    class="collector-notice hidden"
+    hidden
+    aria-hidden="true"
+  >
+    <div class="collector-notice__backdrop" data-notice-dismiss></div>
+    <div
+      class="collector-notice__card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="collector-obs-size-notice-title"
+    >
+      <p class="collector-notice__kicker">패치 안내</p>
+      <h2 id="collector-obs-size-notice-title" class="collector-notice__title">
+        OBS 브라우저 소스 해상도
+      </h2>
+      <p class="collector-notice__body">
+        처음 등록할 때만 <strong>960 × 1080</strong>으로 넣으시면,
+        이후 OBS 화면에서 크기를 줄이셔도 문제 없도록 해 두었습니다.
+      </p>
+      <div class="collector-notice__footer">
+        <label class="collector-notice__check">
+          <input type="checkbox" id="collector-obs-size-notice-hide" />
+          <span>다시 보지 않기</span>
+        </label>
+        <button type="button" class="ending-btn" id="collector-obs-size-notice-ok">
+          확인
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var prefix = window.CREDITS_BASE ? window.CREDITS_BASE + "/" : "";
+      var v = window.ENDING_CACHE_V || String(Date.now());
+      function withV(href) {
+        return href + (href.indexOf("?") >= 0 ? "&" : "?") + "v=" + encodeURIComponent(v);
+      }
+      function loadScript(src) {
+        return new Promise(function (resolve, reject) {
+          var s = document.createElement("script");
+          s.src = withV(src);
+          s.onload = resolve;
+          s.onerror = reject;
+          document.body.appendChild(s);
+        });
+      }
+      loadScript(prefix + "js/collect-runtime.js")
+        .then(function () {
+          return loadScript(prefix + "js/collector.js");
+        })
+        .catch(function (err) {
+          console.error("[ending] script load fail", err);
+        });
+    })();
+  </script>
+</body>
+</html>
