@@ -161,6 +161,44 @@
     return `${Math.floor(n / 3600)}시간 전`;
   }
 
+  function formatHistoryDateLabel(dateStr, count) {
+    const raw = String(dateStr || "").trim();
+    if (!raw) return "—";
+    const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return raw;
+    const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    const label = d.toLocaleDateString("ko-KR", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      timeZone: "UTC",
+    });
+    const n = Number(count) || 0;
+    return n > 0 ? `${label} · ${n}회` : label;
+  }
+
+  function formatHistoryClock(iso) {
+    const s = String(iso || "").trim();
+    if (!s) return "—";
+    const d = new Date(s.endsWith("Z") || s.includes("+") ? s : `${s}Z`);
+    if (Number.isNaN(d.getTime())) return "—";
+    return d.toLocaleTimeString("ko-KR", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+      timeZone: "Asia/Seoul",
+    });
+  }
+
+  function isBroadcastLive(data) {
+    if (!data) return false;
+    if (activeTab === "me") {
+      return Boolean(data.live?.active);
+    }
+    const sess = data.sirian?.session || {};
+    return Boolean(sess.active);
+  }
+
   async function fetchJson(path, opts) {
     const res = await fetch(apiUrl(path), {
       credentials: "same-origin",
@@ -2319,13 +2357,44 @@
     };
   }
 
-  function setViewModeUi() {
-    const isHist = viewMode === "history";
-    els.viewLive?.classList.toggle("is-on", !isHist);
-    els.viewHistory?.classList.toggle("is-on", isHist);
-    els.viewLive?.setAttribute("aria-selected", isHist ? "false" : "true");
-    els.viewHistory?.setAttribute("aria-selected", isHist ? "true" : "false");
-    if (els.history) els.history.hidden = !isHist;
+  function setViewModeUi({ broadcastLive = null } = {}) {
+    const live = broadcastLive == null ? isBroadcastLive(lastData) : Boolean(broadcastLive);
+    const isHist = !live || viewMode === "history";
+    if (els.viewmode) {
+      els.viewmode.hidden = !live;
+      els.viewmode.classList.toggle("is-hidden", !live);
+    }
+    if (els.viewLive) {
+      els.viewLive.hidden = !live;
+      els.viewLive.disabled = !live;
+      els.viewLive.classList.toggle("is-on", live && !isHist);
+      els.viewLive.setAttribute("aria-selected", live && !isHist ? "true" : "false");
+    }
+    if (els.viewHistory) {
+      els.viewHistory.classList.toggle("is-on", isHist);
+      els.viewHistory.setAttribute("aria-selected", isHist ? "true" : "false");
+    }
+    if (els.history) {
+      els.history.hidden = !isHist;
+      els.history.classList.toggle("is-standalone", !live);
+    }
+  }
+
+  function syncViewModeForLiveState(data) {
+    const live = isBroadcastLive(data);
+    if (!live) {
+      if (viewMode !== "history") {
+        viewMode = "history";
+        historyPayload = null;
+        try {
+          sessionStorage.setItem(VIEW_KEY, viewMode);
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    }
+    setViewModeUi({ broadcastLive: live });
+    return live;
   }
 
   function stationForHistory(data) {
@@ -2351,13 +2420,16 @@
           .map((d) => {
             const date = String(d.date || "");
             const n = Number(d.count || d.broadcasts || 0);
-            const label = n > 0 ? `${date} (${n})` : date;
+            const label = formatHistoryDateLabel(date, n);
             return `<option value="${esc(date)}"${date === historyDate ? " selected" : ""}>${esc(
               label
             )}</option>`;
           })
           .join("")
       : `<option value="">아카이브 없음</option>`;
+    if (els.historyDate) {
+      els.historyDate.disabled = !items.length;
+    }
   }
 
   async function loadHistoryList() {
@@ -2394,10 +2466,15 @@
           return `<button type="button" class="ending-dev-history__item${on ? " is-on" : ""}" data-archive-id="${esc(
             it.archiveId
           )}">
-            <span class="ending-dev-history__item-title">${esc(it.title || "(제목 없음)")}</span>
-            <span class="ending-dev-history__item-meta">${esc(fmtTime(it.startedAt))} · ${esc(
-            dur
-          )} · 피크 ${esc(peak)} · 채팅 ${esc(chat)} · 별풍 ${esc(balloon)}</span>
+            <span class="ending-dev-history__item-main">
+              <span class="ending-dev-history__item-title">${esc(it.title || "(제목 없음)")}</span>
+              <span class="ending-dev-history__item-sub">${esc(formatHistoryClock(it.startedAt))} · ${esc(dur)}</span>
+            </span>
+            <span class="ending-dev-history__item-badges">
+              <span class="ending-dev-history__badge">피크 ${esc(peak)}</span>
+              <span class="ending-dev-history__badge">채팅 ${esc(chat)}</span>
+              <span class="ending-dev-history__badge">별풍 ${esc(balloon)}</span>
+            </span>
           </button>`;
         })
         .join("");
@@ -2434,6 +2511,7 @@
 
   function setViewMode(mode) {
     const next = mode === "history" ? "history" : "live";
+    if (next === "live" && lastData && !isBroadcastLive(lastData)) return;
     if (next === viewMode && (next !== "history" || historyPayload)) {
       setViewModeUi();
       return;
@@ -2513,8 +2591,10 @@
     if (els.meta) {
       els.meta.textContent = acc.meta || (sess.updatedAt ? `세션 갱신 ${fmtTime(sess.updatedAt)}` : "—");
     }
+    const live = syncViewModeForLiveState(data);
+
     if (els.note) {
-      if (viewMode === "history" && acc.archiveId) {
+      if (viewMode === "history" && acc.archiveId && live) {
         els.note.hidden = false;
         els.note.textContent = `날짜별 보기 · ${acc.archiveId}`;
       } else {
@@ -2522,8 +2602,6 @@
         els.note.textContent = "";
       }
     }
-
-    setViewModeUi();
 
     setPanelStatus(acc);
     renderStats(els.stats, [
@@ -2575,7 +2653,8 @@
       if (!data?.ok) throw new Error(data?.error || "monitor_failed");
       showApp();
       paint(data);
-      if (viewMode === "history") {
+      const live = isBroadcastLive(data);
+      if (!live || viewMode === "history") {
         await loadHistoryDates(data);
         if (!historyPayload) await loadHistoryList();
       }

@@ -92,9 +92,13 @@
         <p class="ending-dev-note" id="acc-note" hidden></p>
 
         <section class="ending-dev-history" id="acc-history" hidden aria-label="날짜별 아카이브">
-          <div class="ending-dev-history__row">
-            <label class="ending-dev-history__label" for="acc-history-date">날짜</label>
-            <select id="acc-history-date" class="ending-dev-history__select"></select>
+          <div class="ending-dev-history__toolbar">
+            <label class="ending-dev-history__picker" for="acc-history-date">
+              <span class="ending-dev-history__picker-label">방송 날짜</span>
+              <span class="ending-dev-history__picker-field">
+                <select id="acc-history-date" class="ending-dev-history__select"></select>
+              </span>
+            </label>
           </div>
           <div class="ending-dev-history__list" id="acc-history-list"></div>
         </section>
