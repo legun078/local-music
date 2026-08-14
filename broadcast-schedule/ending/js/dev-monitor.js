@@ -2160,20 +2160,6 @@
     renderDataPanel(acc.sections, (acc.session || {}).collected || {});
   }
 
-  function onDataTabClick(id) {
-    const next = String(id || "").trim();
-    if (!next || next === dataTabId) return;
-    dataTabId = next;
-    try {
-      sessionStorage.setItem(DATA_TAB_KEY, dataTabId);
-    } catch (_) {
-      /* ignore */
-    }
-    if (!lastData) return;
-    const acc = resolveAccount(lastData, activeTab);
-    renderDataPanel(acc.sections, (acc.session || {}).collected || {});
-  }
-
   function yn(v) {
     return v
       ? `<span class="ending-dev-pill is-on">ON</span>`
