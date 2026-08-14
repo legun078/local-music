@@ -47,9 +47,9 @@
       </div>
       <nav class="ending-dev-bar__nav" aria-label="엔딩 메뉴">
         <a href="./">수집기</a>
-        <a href="/studio">스튜디오</a>
-        <a href="/dev">실시간 데이터</a>
-        <a href="/dev/me" aria-current="page">내 계정 테스트</a>
+        <a data-ending-href="/studio">스튜디오</a>
+        <a data-ending-href="/dev">실시간 데이터</a>
+        <a data-ending-href="/dev/me" aria-current="page">내 계정 테스트</a>
         <a href="diary" hidden aria-hidden="true" tabindex="-1">일기장</a>
       </nav>
       <div class="ending-dev-bar__tools">
@@ -73,7 +73,7 @@
     <div id="dev-app" class="ending-dev-app" hidden>
       <p class="ending-dev-page-lead">
         민석 계정으로 수집기가 붙는지 확인하는 페이지입니다. 시리안 방송 수치는
-        <a href="/dev">실시간 데이터</a>에서 보세요.
+        <a data-ending-href="/dev">실시간 데이터</a>에서 보세요.
       </p>
       <section class="ending-dev-overview" aria-label="연결 상태">
         <section class="ending-dev-hero" id="dev-strip" aria-label="연결 상태"></section>
@@ -128,7 +128,11 @@
   </div>
   <script>
     (function () {
-      var prefix = window.CREDITS_BASE ? window.CREDITS_BASE + "/" : "";
+      var base = window.CREDITS_BASE || "";
+      document.querySelectorAll("[data-ending-href]").forEach(function (a) {
+        a.setAttribute("href", base + a.getAttribute("data-ending-href"));
+      });
+      var prefix = base ? base + "/" : "";
       var s = document.createElement("script");
       s.src = prefix + "js/dev-monitor.js?v=" + (window.ENDING_CACHE_V || Date.now());
       document.body.appendChild(s);

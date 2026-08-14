@@ -47,9 +47,9 @@
       </div>
       <nav class="ending-dev-bar__nav" aria-label="엔딩 메뉴">
         <a href="./">수집기</a>
-        <a href="/studio">스튜디오</a>
-        <a href="/dev" aria-current="page">실시간 데이터</a>
-        <a href="/dev/me">내 계정 테스트</a>
+        <a data-ending-href="/studio">스튜디오</a>
+        <a data-ending-href="/dev" aria-current="page">실시간 데이터</a>
+        <a data-ending-href="/dev/me">내 계정 테스트</a>
         <a href="diary" hidden aria-hidden="true" tabindex="-1">일기장</a>
       </nav>
       <div class="ending-dev-bar__tools">
@@ -123,7 +123,11 @@
   </div>
   <script>
     (function () {
-      var prefix = window.CREDITS_BASE ? window.CREDITS_BASE + "/" : "";
+      var base = window.CREDITS_BASE || "";
+      document.querySelectorAll("[data-ending-href]").forEach(function (a) {
+        a.setAttribute("href", base + a.getAttribute("data-ending-href"));
+      });
+      var prefix = base ? base + "/" : "";
       var s = document.createElement("script");
       s.src = prefix + "js/dev-monitor.js?v=" + (window.ENDING_CACHE_V || Date.now());
       document.body.appendChild(s);
