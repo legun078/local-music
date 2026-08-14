@@ -653,11 +653,9 @@
 
   function renderChartZoomControls() {
     const zoom = chartZoomLevel();
-    const slider = chartZoomSliderValue(zoom);
     return `<div class="ending-dev-chart__zoom" role="group" aria-label="그래프 X축 확대">
       <span class="ending-dev-chart__zoom-label">X축</span>
       <button type="button" class="ending-dev-chart__zoom-btn" data-chart-zoom="out" aria-label="축소">−</button>
-      <input type="range" class="ending-dev-chart__zoom-range" data-chart-zoom-range min="0" max="100" step="1" value="${slider}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${slider}" aria-label="그래프 X축 확대" />
       <button type="button" class="ending-dev-chart__zoom-btn" data-chart-zoom="in" aria-label="확대">+</button>
       <button type="button" class="ending-dev-chart__zoom-btn ending-dev-chart__zoom-btn--fit" data-chart-zoom="fit" aria-label="전체 보기">전체</button>
       <span class="ending-dev-chart__zoom-readout" data-chart-zoom-readout>${esc(chartZoomLabel(zoom))}</span>
@@ -801,12 +799,70 @@
     const xAtTime = (at) => {
       const ms = parseChartDate(at)?.getTime();
       if (!ms) return pad.l + xInset;
-      const t = Math.max(0, Math.min(1, (ms - minMs) / spanMs));
+      const t = (ms - minMs) / spanMs;
       return pad.l + xInset + t * xSpan;
     };
     const yViewers = (v) => pad.t + yInset + ySpan - (v / maxViewers) * ySpan;
     const yChats = (v) => pad.t + yInset + ySpan - (v / maxChats) * ySpan;
-    return { innerW, innerH, xAtTime, yViewers, yChats };
+    return { innerW, innerH, xAtTime, yViewers, yChats, xInset, yInset };
+  }
+
+  /** 보이는 시간 구간(+경계 1점)만 골라 X축 비율 재계산 시 왜곡을 막는다. */
+  function chartSeriesInWindow(points, viewMinMs, viewMaxMs) {
+    const minMs = Number(viewMinMs);
+    const maxMs = Number(viewMaxMs);
+    const list = (Array.isArray(points) ? points : [])
+      .map((p) => ({ p, ms: parseChartDate(p?.at)?.getTime() }))
+      .filter((row) => row.ms != null)
+      .sort((a, b) => a.ms - b.ms);
+    if (!list.length) return [];
+    if (!Number.isFinite(minMs) || !Number.isFinite(maxMs)) return list.map((row) => row.p);
+
+    let before = null;
+    let after = null;
+    const inWindow = [];
+    for (const row of list) {
+      if (row.ms < minMs) {
+        before = row.p;
+        continue;
+      }
+      if (row.ms > maxMs) {
+        if (!after) after = row.p;
+        break;
+      }
+      inWindow.push(row.p);
+    }
+    const out = [];
+    if (before) out.push(before);
+    out.push(...inWindow);
+    if (after) out.push(after);
+    if (out.length) return out;
+
+    const target = (minMs + maxMs) / 2;
+    let best = list[0];
+    let bestDist = Math.abs(best.ms - target);
+    for (const row of list) {
+      const dist = Math.abs(row.ms - target);
+      if (dist < bestDist) {
+        best = row;
+        bestDist = dist;
+      }
+    }
+    return [best.p];
+  }
+
+  function chartTimeInWindow(at, viewMinMs, viewMaxMs) {
+    const ms = parseChartDate(at)?.getTime();
+    if (!ms) return false;
+    return ms >= Number(viewMinMs) && ms <= Number(viewMaxMs);
+  }
+
+  function renderChartClipDef(pad, w, h) {
+    const yBottom = pad.t + (h - pad.t - pad.b);
+    return `<defs><clipPath id="ending-dev-chart-clip"><rect x="${pad.l}" y="${pad.t}" width="${Math.max(
+      0,
+      w - pad.l - pad.r
+    )}" height="${Math.max(0, yBottom - pad.t)}" /></clipPath></defs>`;
   }
 
   /** 실측 점을 지나고, 뾰족한 피크에서 아래로 빠지지 않게 잇는다. */
@@ -1702,7 +1758,8 @@
       maxV,
       maxV
     );
-    const linePts = points.map((p) => ({
+    const visiblePoints = chartSeriesInWindow(points, viewMinMs, viewMaxMs);
+    const linePts = visiblePoints.map((p) => ({
       x: Number(xAtTime(p.at)),
       y: Number(yAt(p.v)),
     }));
@@ -1724,7 +1781,7 @@
     const jumps = Array.isArray(o.jumps) ? o.jumps.filter(Boolean) : [];
     const peakJump = jumps.find((j) => j && j.kind !== "chat") || jumps[0];
     let peakMark = "";
-    if (peakJump) {
+    if (peakJump && chartTimeInWindow(peakJump.at, viewMinMs, viewMaxMs)) {
       let idx = points.findIndex((p) => p.at === peakJump.at);
       if (idx < 0) {
         const want = chartMinuteMs(peakJump.at);
@@ -1747,9 +1804,12 @@
         data-chart-full-min="${fullMinMs}" data-chart-full-max="${fullMaxMs}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
         <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${esc(o.ariaLabel || "추이")}">
+          ${renderChartClipDef(pad, w, h)}
           ${yLines}
+          <g clip-path="url(#ending-dev-chart-clip)">
           <path class="ending-dev-chart__area" style="fill:${esc(areaColor)}" d="${area}" />
           <path class="ending-dev-chart__line" style="stroke:${esc(lineColor)}" d="${line}" />
+          </g>
           ${xLabels}
           ${peakMark}
           <circle class="ending-dev-chart__marker" data-chart-marker hidden vector-effect="non-scaling-stroke" cx="0" cy="0" r="3.5" />
@@ -1826,8 +1886,10 @@
       maxViewers,
       maxChats
     );
-    const viewerLine = pathForSeriesPointsSmooth(viewers, xAtTime, yViewers);
-    const chatLine = pathForSeriesPointsSmooth(chats, xAtTime, yChats);
+    const visibleViewers = chartSeriesInWindow(viewers, viewMinMs, viewMaxMs);
+    const visibleChats = chartSeriesInWindow(chats, viewMinMs, viewMaxMs);
+    const viewerLine = pathForSeriesPointsSmooth(visibleViewers, xAtTime, yViewers);
+    const chatLine = pathForSeriesPointsSmooth(visibleChats, xAtTime, yChats);
     const yTicksViewers = [0, Math.round(maxViewers / 2), maxViewers];
     const yTicksChats = [0, Math.round(maxChats / 2), maxChats];
     const yLines = yTicksViewers
@@ -1856,7 +1918,7 @@
       .filter(Boolean)
       .join(" · ");
     const peakMarks = `${
-      viewerPeak
+      viewerPeak && chartTimeInWindow(viewerPeak.at, viewMinMs, viewMaxMs)
         ? renderPeakMark(
             viewerPeak,
             xAtTime(viewerPeak.at),
@@ -1865,7 +1927,7 @@
           )
         : ""
     }${
-      chatPeak
+      chatPeak && chartTimeInWindow(chatPeak.at, viewMinMs, viewMaxMs)
         ? renderPeakMark(
             chatPeak,
             xAtTime(chatPeak.at),
@@ -1887,10 +1949,13 @@
         data-chart-full-min="${fullMinMs}" data-chart-full-max="${fullMaxMs}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
         <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="시청자·채팅 화력 추이">
+          ${renderChartClipDef(pad, w, h)}
           ${yLines}
           ${yRight}
+          <g clip-path="url(#ending-dev-chart-clip)">
           ${viewerLine ? `<path class="ending-dev-chart__line ending-dev-chart__line--viewers" d="${viewerLine}" />` : ""}
           ${chatLine ? `<path class="ending-dev-chart__line ending-dev-chart__line--chat" d="${chatLine}" />` : ""}
+          </g>
           ${xLabels}
           ${peakMarks}
           <circle class="ending-dev-chart__marker ending-dev-chart__marker--viewers" data-chart-marker-viewers hidden vector-effect="non-scaling-stroke" cx="0" cy="0" r="3.5" />
@@ -2978,18 +3043,14 @@
     if (!btn) return;
     onDataLimitClick(btn.getAttribute("data-limit"));
   });
-  els.dataBody?.addEventListener("change", (ev) => {
-    if (!ev.target?.matches?.("[data-chart-zoom-range]")) return;
-    onChartZoomAction("range", ev.target.value);
-  });
   els.refresh?.addEventListener("click", () => refresh());
   els.auto?.addEventListener("change", () => schedule());
   window.addEventListener("scroll", scheduleScrollPersist, { passive: true });
   els.dataBody?.addEventListener("scroll", (ev) => {
     const scroller = ev.target?.closest?.("[data-chart-pan-scroll]");
     if (scroller) scheduleChartPanFromScroll(scroller);
+    scheduleScrollPersist();
   }, { passive: true, capture: true });
-  els.dataBody?.addEventListener("scroll", scheduleScrollPersist, { passive: true, capture: true });
   window.addEventListener(
     "resize",
     () => {
