@@ -23,6 +23,14 @@
     window.ENDING_MONITOR_MODE = "live_data";
     window.ENDING_CACHE_V = String(Date.now());
     (function () {
+      try {
+        var q = new URLSearchParams(location.search);
+        if (q.get("code") || q.get("authCode")) {
+          document.documentElement.classList.add("ending-oauth-busy");
+        }
+      } catch (_) {}
+    })();
+    (function () {
       var v = window.ENDING_CACHE_V;
       var prefix = window.CREDITS_BASE ? window.CREDITS_BASE + "/" : "";
       function css(href) {

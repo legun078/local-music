@@ -180,6 +180,24 @@
   margin-top: 0.35rem;
 }
 
+html.ending-oauth-busy .ending-dev-shell {
+  visibility: hidden;
+}
+
+html.ending-oauth-busy body::before {
+  content: "숲 로그인 처리 중…";
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--dev-muted);
+  background: #f4f7fb;
+  z-index: 9999;
+}
+
 .ending-dev-stamp {
   font-family: var(--dev-mono);
   font-size: 0.72rem;
