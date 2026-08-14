@@ -3,8 +3,6 @@
  */
 (() => {
   const base = () => String(window.CREDITS_BASE || "");
-  const prefix = () => (base() ? `${base()}/` : "/");
-  let runtime = null;
 
   function apiUrl(path) {
     const p = String(path || "");
@@ -16,6 +14,35 @@
       return String(localStorage.getItem(window.EndingCollectRuntime?.TOKEN_KEY || "") || "").trim();
     } catch (_) {
       return "";
+    }
+  }
+
+  function clearOauthBusy() {
+    try {
+      document.documentElement.classList.remove("ending-oauth-busy");
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function hasOauthCodeInUrl() {
+    try {
+      const q = new URLSearchParams(location.search);
+      return Boolean(q.get("code") || q.get("authCode"));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function stripOauthParamsFromUrl() {
+    try {
+      const url = new URL(location.href);
+      const keys = ["code", "authCode", "error", "error_description"];
+      if (!keys.some((k) => url.searchParams.get(k))) return;
+      keys.forEach((k) => url.searchParams.delete(k));
+      history.replaceState({}, "", url.toString());
+    } catch (_) {
+      /* ignore */
     }
   }
 
@@ -40,6 +67,8 @@
     }
   }
 
+  let runtime = null;
+
   async function ensureRuntime() {
     if (!window.EndingCollectRuntime) return null;
     if (!runtime) {
@@ -59,6 +88,12 @@
   }
 
   async function startLogin() {
+    clearOauthBusy();
+    try {
+      sessionStorage.setItem(window.EndingCollectRuntime?.OAUTH_NEXT_KEY || "ending_oauth_next", "live_data");
+    } catch (_) {
+      /* ignore */
+    }
     const rt = await ensureRuntime();
     if (!rt) return false;
     await rt.prepareBoot();
@@ -66,8 +101,24 @@
   }
 
   async function bootstrapAuth() {
-    await completeOauthIfNeeded();
-    return verifyStaffAccess();
+    const hadCode = hasOauthCodeInUrl();
+    try {
+      const oauthOk = hadCode ? await completeOauthIfNeeded() : false;
+      const ok = await verifyStaffAccess();
+      if (hadCode && !oauthOk && !ok) {
+        window.__liveDataGateMsg = "숲 로그인에 실패했습니다. 다시 시도해 주세요.";
+        stripOauthParamsFromUrl();
+      }
+      return ok;
+    } catch (_) {
+      if (hadCode) {
+        window.__liveDataGateMsg = "숲 로그인 처리 중 오류가 났습니다.";
+        stripOauthParamsFromUrl();
+      }
+      return false;
+    } finally {
+      clearOauthBusy();
+    }
   }
 
   async function logout() {
@@ -100,7 +151,10 @@
     startLogin,
     verifyStaffAccess,
     logout,
+    clearOauthBusy,
   };
+
+  window.__liveDataAuthReady = bootstrapAuth();
 
   document.getElementById("btn-live-data-login")?.addEventListener("click", () => {
     startLogin();
@@ -115,9 +169,5 @@
     if (key && ev.key === key && token()) {
       window.__liveDataRefresh?.();
     }
-  });
-
-  bootstrapAuth().then((ok) => {
-    if (ok) window.__liveDataRefresh?.();
   });
 })();

@@ -2553,6 +2553,7 @@
   }
 
   function showGate(msg) {
+    if (isLiveDataPage()) window.__liveDataAuth?.clearOauthBusy?.();
     if (els.app) els.app.hidden = true;
     if (els.gate) els.gate.hidden = false;
     if (els.gateMsg && msg) els.gateMsg.textContent = msg;
@@ -2560,6 +2561,7 @@
   }
 
   function showApp() {
+    if (isLiveDataPage()) window.__liveDataAuth?.clearOauthBusy?.();
     if (els.gate) els.gate.hidden = true;
     if (els.app) els.app.hidden = false;
     if (els.gateLogin) els.gateLogin.hidden = true;
@@ -2649,5 +2651,21 @@
     showGate("시리안 또는 허용된 계정으로 숲 로그인해 주세요.");
   };
 
-  refresh().then(() => schedule());
+  (async () => {
+    if (isLiveDataPage()) {
+      try {
+        await (window.__liveDataAuthReady || Promise.resolve(false));
+      } catch (_) {
+        /* ignore */
+      }
+      window.__liveDataAuth?.clearOauthBusy?.();
+      const gateMsg = String(window.__liveDataGateMsg || "").trim();
+      if (gateMsg) {
+        window.__liveDataGateMsg = "";
+        showGate(gateMsg);
+      }
+    }
+    await refresh();
+    schedule();
+  })();
 })();

@@ -1365,6 +1365,15 @@
         return true;
       } catch (err) {
         log(`oauth fail: ${errText(err)}`);
+        try {
+          const url = new URL(location.href);
+          ["code", "authCode", "error", "error_description"].forEach((k) =>
+            url.searchParams.delete(k)
+          );
+          history.replaceState({}, "", url.toString());
+        } catch (_) {
+          /* ignore */
+        }
         return false;
       }
     }
