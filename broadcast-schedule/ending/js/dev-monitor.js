@@ -347,7 +347,7 @@
           <h4 class="ending-dev-seg-panel__title">최근 수집 구간</h4>
           <p class="ending-dev-seg-panel__summary">${esc(summary)}</p>
         </header>
-        <p class="ending-dev-seg-panel__hint">수집기 탭이 끊기면 구간이 나뉩니다. 아래는 연결·재연결 기록입니다.</p>
+        <p class="ending-dev-seg-panel__hint">방송 중 수집기 탭이 잠깐 끊겨도 구간은 이어집니다. 방종 후에만 구간이 닫힙니다.</p>
         <ol class="ending-dev-seg-timeline">${items}</ol>
       </section>`;
   }

@@ -3438,12 +3438,59 @@ def _normalize_collector_segments(raw: Any) -> list[dict[str, Any]]:
     return out[-40:]
 
 
+def _session_broadcast_active(session: dict[str, Any]) -> bool:
+    """방송 세션이 아직 종료되지 않았는지."""
+    if not session.get("active"):
+        return False
+    if session.get("endedAt"):
+        return False
+    return bool(session.get("startedAt"))
+
+
+def compact_collector_segments_for_active_session(session: dict[str, Any]) -> bool:
+    """방송 중에는 수집 구간을 하나로 유지(탭 끊김·재연결로 쪼개지지 않게)."""
+    if not _session_broadcast_active(session):
+        return False
+    segs = _normalize_collector_segments(session.get("collectorSegments"))
+    if not segs:
+        return False
+    started = str(segs[0].get("startedAt") or "").strip()
+    if not started:
+        return False
+    merged = [{"startedAt": started, "endedAt": None}]
+    if len(segs) == 1 and not segs[0].get("endedAt"):
+        return False
+    session["collectorSegments"] = merged
+    return True
+
+
+def collector_segments_for_monitor(session: dict[str, Any]) -> list[dict[str, Any]]:
+    """모니터 UI — 방송 중이면 연속 구간 하나로."""
+    segs = _normalize_collector_segments(session.get("collectorSegments"))
+    if not segs:
+        return []
+    if _session_broadcast_active(session):
+        started = str(segs[0].get("startedAt") or "").strip()
+        if started:
+            return [{"startedAt": started, "endedAt": None}]
+    return segs[-8:]
+
+
 def open_collector_segment(session: dict[str, Any], *, at: str | None = None) -> bool:
     """수집기 연결 시작. 이미 열린 구간이 있으면 False."""
     now = str(at or utc_now_iso())
     segs = _normalize_collector_segments(session.get("collectorSegments"))
     if segs and not segs[-1].get("endedAt"):
+        session["chatSdkConnected"] = True
+        session["pendingChatSdk"] = False
         return False
+    # 방송 중 재연결 — 직전 구간 이어 받기 (새 구간 만들지 않음)
+    if segs and segs[-1].get("endedAt") and _session_broadcast_active(session):
+        segs[-1]["endedAt"] = None
+        session["collectorSegments"] = segs
+        session["chatSdkConnected"] = True
+        session["pendingChatSdk"] = False
+        return True
     segs.append({"startedAt": now, "endedAt": None})
     session["collectorSegments"] = segs
     session["chatSdkConnected"] = True
@@ -3608,6 +3655,7 @@ def resume_collector_session(session: dict[str, Any]) -> dict[str, Any]:
     session["active"] = True
     session["endedAt"] = None
     open_collector_segment(session)
+    compact_collector_segments_for_active_session(session)
     return session
 
 
@@ -6817,6 +6865,7 @@ class CreditsStore:
                 if keep and self._norm_station_id(session.get("stationId")) != keep:
                     session["stationId"] = keep
                 open_collector_segment(session)
+                compact_collector_segments_for_active_session(session)
                 self._write_json(self.session_path, session)
                 self._mirror_station_session(session)
                 payload = self.build_credits_payload(session)
@@ -6829,7 +6878,7 @@ class CreditsStore:
         return self.load_session()
 
     def pause_collecting(self, station_id: str | None = None) -> dict[str, Any]:
-        """수집기 연결만 종료(방송 세션은 유지)."""
+        """수집기 탭 연결 해제 — 방송 중이면 세션·구간 유지, 방종 후에만 구간 종료."""
         sid = str(station_id or "").strip()
         with _lock:
             if sid:
@@ -6837,7 +6886,11 @@ class CreditsStore:
             session = self.load_session()
             if sid and str(session.get("stationId") or "") != sid:
                 session["stationId"] = sid
-            if close_collector_segment(session):
+            if _session_broadcast_active(session):
+                session["chatSdkConnected"] = False
+                session["pendingChatSdk"] = True
+                self.save_session(session, rebuild=False)
+            elif close_collector_segment(session):
                 self.save_session(session, rebuild=True)
             else:
                 session["chatSdkConnected"] = False

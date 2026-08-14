@@ -38,6 +38,7 @@ from credits_store import (
     compact_metrics_series,
     build_demo_credits_payload,
     coalesce_session_user_aliases,
+    collector_segments_for_monitor,
     format_kst_clock,
     format_watch,
     chatter_watch_ms,
@@ -768,7 +769,7 @@ def _sirian_station_id() -> str:
 def _session_monitor_summary(session: dict) -> dict[str, Any]:
     chatters = session.get("chatters") if isinstance(session.get("chatters"), dict) else {}
     donations = session.get("donations") if isinstance(session.get("donations"), dict) else {}
-    segs = session.get("collectorSegments") if isinstance(session.get("collectorSegments"), list) else []
+    segs = collector_segments_for_monitor(session if isinstance(session, dict) else {})
     open_seg = bool(segs) and isinstance(segs[-1], dict) and not segs[-1].get("endedAt")
     chat_count = 0
     active_chatters = 0
@@ -2789,7 +2790,7 @@ def api_session_begin():
 
 @app.route("/api/credits/session/collector-pause", methods=["POST"])
 def api_session_collector_pause():
-    """수집기 탭 연결 해제 — 방송 세션은 유지하고 수집 구간만 닫는다."""
+    """수집기 탭 연결 해제 — 방송 중이면 세션·구간 유지, 방종 후에만 구간 종료."""
     if not _collector_authorized():
         return _forbidden_collector_response()
     payload = request.get_json(silent=True)
