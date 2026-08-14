@@ -530,8 +530,11 @@
   const CHART_AXIS_R_DUAL = 58;
   const CHART_PLOT_PAD = { t: 18, r: 12, b: 30, l: 12 };
   const CHART_SCROLL_CANVAS_V = 3;
+  /** false: 확대·pan UI·동작 비활성(구현 코드는 유지). true로 바꾸면 복구 */
+  const CHART_ZOOM_UI_ENABLED = false;
 
   function chartZoomLevel() {
+    if (!CHART_ZOOM_UI_ENABLED) return CHART_ZOOM_DEFAULT;
     const stored = Number(sessionStorage.getItem(CHART_ZOOM_STORAGE_KEY));
     if (Number.isFinite(stored) && stored >= CHART_ZOOM_MIN && stored <= CHART_ZOOM_MAX) {
       return stored;
@@ -540,6 +543,7 @@
   }
 
   function setChartZoomLevel(zoom) {
+    if (!CHART_ZOOM_UI_ENABLED) return;
     const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
     const prevZoom = chartZoomLevel();
     const prevPan = chartPanLevel();
@@ -578,6 +582,7 @@
   }
 
   function chartPanLevel() {
+    if (!CHART_ZOOM_UI_ENABLED) return 0;
     const stored = Number(sessionStorage.getItem(CHART_PAN_STORAGE_KEY));
     if (Number.isFinite(stored) && stored >= 0 && stored <= 1) return stored;
     return 0;
@@ -924,7 +929,7 @@
   }
 
   function onChartPanWheel(ev) {
-    if (chartIsFitZoom()) return;
+    if (!CHART_ZOOM_UI_ENABLED || chartIsFitZoom()) return;
     const scroller = ev.target?.closest?.("[data-chart-plot-scroll]");
     if (!scroller) return;
     const dx = chartPanWheelDelta(ev);
@@ -1076,6 +1081,7 @@
   }
 
   function renderChartZoomControls() {
+    if (!CHART_ZOOM_UI_ENABLED) return "";
     const zoom = chartZoomLevel();
     return `<div class="ending-dev-chart__zoom" role="group" aria-label="그래프 X축 확대">
       <span class="ending-dev-chart__zoom-label">X축</span>
@@ -3233,6 +3239,7 @@
   }
 
   function onChartZoomAction(action, value) {
+    if (!CHART_ZOOM_UI_ENABLED) return;
     const act = String(action || "").trim();
     if (act === "fit") {
       setChartZoomLevel(CHART_ZOOM_DEFAULT);
