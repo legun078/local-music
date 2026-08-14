@@ -707,8 +707,10 @@
       3 * 60 * 60_000,
       4 * 60 * 60_000,
     ];
-    const minLabelGapPx = 54;
-    const maxTicks = Math.max(3, Math.floor(Math.max(120, chartWidthPx) / minLabelGapPx));
+    const minLabelGapPx = 58;
+    const innerPx = Math.max(120, chartWidthPx);
+    const maxTicks = Math.max(3, Math.floor(innerPx / minLabelGapPx));
+    const minGapMs = (minLabelGapPx / innerPx) * spanMs;
     let intervalMs = intervals[intervals.length - 1];
     for (const candidate of intervals) {
       if (Math.ceil(spanMs / candidate) + 1 <= maxTicks) {
@@ -722,19 +724,48 @@
       times.push(t);
       t += intervalMs;
     }
-    if (!times.length || times[0] > minMs + spanMs * 0.015) {
+    if (!times.length || times[0] - minMs > minGapMs) {
       times.unshift(minMs);
     }
-    if (times[times.length - 1] < maxMs - spanMs * 0.015) {
+    if (maxMs - times[times.length - 1] > minGapMs) {
       times.push(maxMs);
     }
     const deduped = [];
     for (const ms of times) {
-      if (!deduped.length || ms - deduped[deduped.length - 1] > spanMs * 0.02) {
+      if (!deduped.length || ms - deduped[deduped.length - 1] >= minGapMs * 0.95) {
         deduped.push(ms);
       }
     }
     return deduped;
+  }
+
+  /** x 위치 기준으로 겹치는 시간 라벨을 제거한다. 끝 시각은 간격 눈금보다 우선. */
+  function chartFilterTimeTicksForLabels(tickTimes, xAtTime, minGapPx = 58) {
+    const list = (Array.isArray(tickTimes) ? tickTimes : [])
+      .map((ms) => ({ ms, x: Number(xAtTime(new Date(ms).toISOString())) }))
+      .filter((row) => Number.isFinite(row.x));
+    if (list.length <= 1) return list.map((row) => row.ms);
+
+    const kept = [list[0]];
+    for (let i = 1; i < list.length; i++) {
+      const item = list[i];
+      const prev = kept[kept.length - 1];
+      const gap = item.x - prev.x;
+      const isLast = i === list.length - 1;
+      if (gap >= minGapPx) {
+        kept.push(item);
+        continue;
+      }
+      if (!isLast) continue;
+      if (kept.length > 1) {
+        const prev2 = kept[kept.length - 2];
+        if (item.x - prev2.x >= minGapPx) {
+          kept.pop();
+          kept.push(item);
+        }
+      }
+    }
+    return kept.map((row) => row.ms);
   }
 
   function chartIndexTickIndices(count, chartWidthPx) {
@@ -752,13 +783,20 @@
   function renderChartTimeAxisDual(tickTimes, xAtTime, pad, w, h) {
     const yGridBottom = pad.t + (h - pad.t - pad.b);
     const yLabel = h - 8;
+    const innerW = w - pad.l - pad.r;
+    const labels = chartFilterTimeTicksForLabels(tickTimes, xAtTime, 58);
     return tickTimes
       .map((ms, i) => {
         const at = new Date(ms).toISOString();
         const x = xAtTime(at);
         const anchor = i === 0 ? "start" : i === tickTimes.length - 1 ? "end" : "middle";
-        return `<line class="ending-dev-chart__grid-v" x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${yGridBottom.toFixed(1)}" />
-          <text class="ending-dev-chart__xlabel" x="${x.toFixed(1)}" y="${yLabel}" text-anchor="${anchor}">${esc(
+        const grid = `<line class="ending-dev-chart__grid-v" x1="${x.toFixed(1)}" y1="${pad.t}" x2="${x.toFixed(1)}" y2="${yGridBottom.toFixed(1)}" />`;
+        if (!labels.includes(ms)) return grid;
+        const labelIdx = labels.indexOf(ms);
+        const labelAnchor =
+          labelIdx === 0 ? "start" : labelIdx === labels.length - 1 ? "end" : "middle";
+        return `${grid}
+          <text class="ending-dev-chart__xlabel" x="${x.toFixed(1)}" y="${yLabel}" text-anchor="${labelAnchor}">${esc(
           chartClockLabel(at)
         )}</text>`;
       })
