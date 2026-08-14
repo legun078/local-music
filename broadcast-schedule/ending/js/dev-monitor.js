@@ -2664,5 +2664,13 @@
 
   window.__liveDataRefresh = () => refresh();
 
+  window.__liveDataLogout = () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+    lastData = null;
+    historyPayload = null;
+    showGate("시리안 또는 허용된 계정으로 숲 로그인해 주세요.");
+  };
+
   refresh().then(() => schedule());
 })();

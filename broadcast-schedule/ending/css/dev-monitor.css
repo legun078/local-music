@@ -236,6 +236,18 @@
   color: #fff;
 }
 
+.ending-dev-refresh--muted {
+  color: var(--dev-muted);
+  border-color: var(--dev-line);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.ending-dev-refresh--muted:hover {
+  color: var(--dev-ink);
+  border-color: var(--dev-line-strong);
+  background: #fff;
+}
+
 .ending-dev-page .ending-dev-refresh:focus-visible,
 .ending-dev-page .ending-dev-tab:focus-visible,
 .ending-dev-page .ending-dev-viewmode__btn:focus-visible,

@@ -70,14 +70,44 @@
     return verifyStaffAccess();
   }
 
+  async function logout() {
+    try {
+      await fetch(apiUrl("/api/credits/logout"), {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { Accept: "application/json" },
+      });
+    } catch (_) {
+      /* ignore */
+    }
+    const keys = [
+      window.EndingCollectRuntime?.TOKEN_KEY || "ending_soop_access_token",
+      window.EndingCollectRuntime?.REFRESH_KEY || "ending_soop_refresh_token",
+      window.EndingCollectRuntime?.STATION_KEY || "ending_soop_station_id",
+    ];
+    keys.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch (_) {
+        /* ignore */
+      }
+    });
+    window.__liveDataLogout?.();
+  }
+
   window.__liveDataAuth = {
     bootstrapAuth,
     startLogin,
     verifyStaffAccess,
+    logout,
   };
 
   document.getElementById("btn-live-data-login")?.addEventListener("click", () => {
     startLogin();
+  });
+
+  document.getElementById("btn-live-data-logout")?.addEventListener("click", () => {
+    logout();
   });
 
   window.addEventListener("storage", (ev) => {
