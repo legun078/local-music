@@ -40,7 +40,6 @@
     peakCap: document.getElementById("acc-peak-cap"),
     dataBody: document.getElementById("acc-data-body"),
     dataHint: document.getElementById("acc-data-hint"),
-    segments: document.getElementById("acc-segments"),
     gateLogin: document.getElementById("btn-live-data-login"),
   };
 
@@ -162,36 +161,6 @@
     return `${Math.floor(n / 3600)}시간 전`;
   }
 
-  function parseSegmentMs(raw) {
-    const s = String(raw || "").trim();
-    if (!s) return NaN;
-    const d = new Date(s.endsWith("Z") || s.includes("+") ? s : `${s}Z`);
-    return d.getTime();
-  }
-
-  function fmtDurationSec(sec) {
-    const n = Math.max(0, Math.floor(Number(sec) || 0));
-    if (n < 60) return `${n}초`;
-    if (n < 3600) {
-      const m = Math.floor(n / 60);
-      const r = n % 60;
-      return r ? `${m}분 ${r}초` : `${m}분`;
-    }
-    const h = Math.floor(n / 3600);
-    const m = Math.floor((n % 3600) / 60);
-    return m ? `${h}시간 ${m}분` : `${h}시간`;
-  }
-
-  function fmtGapSec(sec) {
-    const n = Math.max(0, Math.floor(Number(sec) || 0));
-    if (n <= 2) return "즉시 재연결";
-    if (n < 60) return `${n}초 공백`;
-    if (n < 3600) return `${Math.floor(n / 60)}분 ${n % 60 ? `${n % 60}초` : ""}`.trim() + " 공백";
-    const h = Math.floor(n / 3600);
-    const m = Math.floor((n % 3600) / 60);
-    return m ? `${h}시간 ${m}분 공백` : `${h}시간 공백`;
-  }
-
   async function fetchJson(path, opts) {
     const res = await fetch(apiUrl(path), {
       credentials: "same-origin",
@@ -281,75 +250,6 @@
         ? `최고 시청 ${peakN.toLocaleString("ko-KR")}명 · ${when}`
         : `최고 시청 ${peakN.toLocaleString("ko-KR")}명`;
     }
-  }
-
-  function renderSegments(el, segs) {
-    if (!el) return;
-    const rows = Array.isArray(segs) ? segs.slice(-5) : [];
-    if (!rows.length) {
-      el.innerHTML = "";
-      return;
-    }
-
-    const items = rows
-      .map((s, i) => {
-        const startedMs = parseSegmentMs(s?.startedAt);
-        const endedMs = s?.endedAt ? parseSegmentMs(s.endedAt) : Date.now();
-        const open = !s?.endedAt;
-        const durSec =
-          Number.isFinite(startedMs) && Number.isFinite(endedMs)
-            ? Math.max(0, Math.floor((endedMs - startedMs) / 1000))
-            : 0;
-        let gapHtml = "";
-        if (i > 0) {
-          const prev = rows[i - 1];
-          const prevEnd = parseSegmentMs(prev?.endedAt);
-          if (Number.isFinite(prevEnd) && Number.isFinite(startedMs) && startedMs >= prevEnd) {
-            const gapSec = Math.floor((startedMs - prevEnd) / 1000);
-            gapHtml = `<li class="ending-dev-seg-timeline__gap" aria-hidden="true"><span>${esc(
-              fmtGapSec(gapSec)
-            )}</span></li>`;
-          }
-        }
-        const range = open
-          ? `${fmtTime(s.startedAt)} → <span class="ending-dev-seg-timeline__now">수집 중</span>`
-          : `${fmtTime(s.startedAt)} → ${fmtTime(s.endedAt)}`;
-        const item = `<li class="ending-dev-seg-timeline__item${open ? " is-open" : ""}">
-          <span class="ending-dev-seg-timeline__dot" aria-hidden="true"></span>
-          <div class="ending-dev-seg-timeline__body">
-            <p class="ending-dev-seg-timeline__range">${range}</p>
-            <p class="ending-dev-seg-timeline__meta">
-              <span class="ending-dev-seg-timeline__dur">${esc(fmtDurationSec(durSec))}</span>
-              ${open ? `<span class="ending-dev-seg-timeline__badge">진행</span>` : `<span class="ending-dev-seg-timeline__badge is-done">완료</span>`}
-            </p>
-          </div>
-        </li>`;
-        return gapHtml + item;
-      })
-      .join("");
-
-    const reconnects = Math.max(0, rows.length - 1);
-    const firstStart = parseSegmentMs(rows[0]?.startedAt);
-    const last = rows[rows.length - 1];
-    const lastEnd = last?.endedAt ? parseSegmentMs(last.endedAt) : Date.now();
-    const totalSec =
-      Number.isFinite(firstStart) && Number.isFinite(lastEnd)
-        ? Math.max(0, Math.floor((lastEnd - firstStart) / 1000))
-        : 0;
-    const summary =
-      rows.length > 1
-        ? `${rows.length}구간 · 재연결 ${reconnects}회 · 합계 ${fmtDurationSec(totalSec)}`
-        : fmtDurationSec(totalSec);
-
-    el.innerHTML = `
-      <section class="ending-dev-seg-panel">
-        <header class="ending-dev-seg-panel__head">
-          <h4 class="ending-dev-seg-panel__title">최근 수집 구간</h4>
-          <p class="ending-dev-seg-panel__summary">${esc(summary)}</p>
-        </header>
-        <p class="ending-dev-seg-panel__hint">방송 중 수집기 탭이 잠깐 끊겨도 구간은 이어집니다. 방종 후에만 구간이 닫힙니다.</p>
-        <ol class="ending-dev-seg-timeline">${items}</ol>
-      </section>`;
   }
 
   function setPanelStatus(acc) {
@@ -2634,7 +2534,6 @@
     renderPeakThumb(acc);
 
     renderDataPanel(acc.sections, collected);
-    renderSegments(els.segments, viewMode === "history" ? [] : sess.collectorSegments);
   }
 
   function paint(data, { animate = false } = {}) {
