@@ -1672,6 +1672,8 @@ html.ending-oauth-busy body::before {
   overflow: hidden;
   overscroll-behavior-x: contain;
 }
+
+.ending-dev-chart__wrap {
   position: relative;
   width: 100%;
   height: 176px;
@@ -1689,7 +1691,7 @@ html.ending-oauth-busy body::before {
   -webkit-overflow-scrolling: touch;
 }
 
-.ending-dev-chart__wrap {
+.ending-dev-chart__pan-scroll[hidden] {
   display: none;
 }
 

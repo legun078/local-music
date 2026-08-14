@@ -660,6 +660,16 @@
     );
   }
 
+  function chartFullRangeMs(range) {
+    if (!range) return null;
+    const fullMinMs = Number(range.fullMinMs ?? range.minMs);
+    const fullMaxMs = Number(range.fullMaxMs ?? range.maxMs);
+    if (!Number.isFinite(fullMinMs) || !Number.isFinite(fullMaxMs) || fullMaxMs <= fullMinMs) {
+      return null;
+    }
+    return { fullMinMs, fullMaxMs };
+  }
+
   function chartPanWheelDelta(ev) {
     let dx = Number(ev?.deltaX) || 0;
     if (Math.abs(dx) < 0.5 && ev?.shiftKey) {
