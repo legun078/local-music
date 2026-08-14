@@ -31,6 +31,7 @@ from credits_schedule import build_next_day_schedule
 from credits_store import (
     CreditsStore,
     apply_signature_amounts_to_payload,
+    apply_peak_viewers_to_series,
     chat_metrics_series_for_session,
     align_viewer_chat_metrics,
     normalize_metric_series,
@@ -945,12 +946,20 @@ def _metrics_series_readonly_preview(session: dict) -> dict[str, list[dict[str, 
         rows = raw.get(key)
         out[key] = normalize_metric_series(rows if isinstance(rows, list) else [])
     chats = chat_metrics_series_for_session(session, raw_dir=CREDITS_RAW_DIR)
-    viewers = normalize_metric_series(raw.get("viewers") if isinstance(raw.get("viewers"), list) else [])
+    viewers = normalize_metric_series(
+        raw.get("viewers") if isinstance(raw.get("viewers"), list) else [],
+        keep_max=True,
+    )
     aligned_v, aligned_c = align_viewer_chat_metrics(
         viewers,
         chats,
         started_at=str(session.get("startedAt") or ""),
         end_at=str(session.get("updatedAt") or "") or None,
+    )
+    aligned_v = apply_peak_viewers_to_series(
+        aligned_v,
+        peak_viewers=session.get("peakViewers"),
+        peak_viewers_at=session.get("peakViewersAt"),
     )
     out["viewers"] = aligned_v
     out["chats"] = aligned_c

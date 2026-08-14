@@ -1770,8 +1770,9 @@ def upsert_metric_point(
     *,
     at: str | None = None,
     max_points: int = _METRICS_SERIES_MAX_POINTS,
+    keep_max: bool = False,
 ) -> bool:
-    """분 버킷에 값 upsert. 같은 분이면 덮어씀. 변경 시 True."""
+    """분 버킷에 값 upsert. 같은 분이면 덮어씀(keep_max면 더 큰 값만). 변경 시 True."""
     try:
         v = int(value)
     except (TypeError, ValueError):
@@ -1783,10 +1784,14 @@ def upsert_metric_point(
     if series and isinstance(series[-1], dict) and str(series[-1].get("at") or "") == at_iso:
         prev = series[-1].get("v")
         try:
-            if int(prev) == v:
-                return False
+            prev_n = int(prev)
         except (TypeError, ValueError):
-            pass
+            prev_n = None
+        if keep_max and prev_n is not None:
+            if v <= prev_n:
+                return False
+        elif prev_n is not None and prev_n == v:
+            return False
         series[-1] = {"at": at_iso, "v": v}
         return True
     series.append({"at": at_iso, "v": v})
@@ -1807,7 +1812,7 @@ def record_live_metrics(
     changed = False
     at_iso = str(at or "").strip() or _minute_bucket_iso()
     if viewers is not None:
-        if upsert_metric_point(series["viewers"], viewers, at=at_iso):
+        if upsert_metric_point(series["viewers"], viewers, at=at_iso, keep_max=True):
             changed = True
     if up_count is not None:
         if session.get("upBaseline") is None:
@@ -1856,8 +1861,9 @@ def normalize_metric_series(
     series: list[Any] | None,
     *,
     cumulative: bool = False,
+    keep_max: bool = False,
 ) -> list[dict[str, Any]]:
-    """분 버킷 정렬·중복 병합. viewers=마지막 값, chats=합산."""
+    """분 버킷 정렬·중복 병합. viewers=최대값, chats=합산, 그 외=마지막 값."""
     buckets: dict[str, int] = {}
     for row in series or []:
         if not isinstance(row, dict):
@@ -1873,6 +1879,8 @@ def normalize_metric_series(
             continue
         if cumulative:
             buckets[at_iso] = int(buckets.get(at_iso) or 0) + v
+        elif keep_max:
+            buckets[at_iso] = max(int(buckets.get(at_iso) or 0), v)
         else:
             buckets[at_iso] = v
     return [{"at": at, "v": buckets[at]} for at in sorted(buckets.keys())]
@@ -1886,7 +1894,7 @@ def align_viewer_chat_metrics(
     end_at: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """시청·화력을 같은 분 그리드에 맞춤 — 빈 분은 시청=직전값, 화력=0."""
-    v_norm = normalize_metric_series(viewers, cumulative=False)
+    v_norm = normalize_metric_series(viewers, cumulative=False, keep_max=True)
     c_norm = normalize_metric_series(chats, cumulative=True)
     if not v_norm and not c_norm:
         return [], []
@@ -1929,17 +1937,59 @@ def compact_metrics_series(session: dict[str, Any]) -> bool:
     """metricsSeries 중복·역순 버킷 정리."""
     series = ensure_metrics_series(session)
     changed = False
-    for key, cumulative in (
-        ("viewers", False),
-        ("up", False),
-        ("balloons", False),
-        ("chats", True),
+    for key, cumulative, keep_max in (
+        ("viewers", False, True),
+        ("up", False, False),
+        ("balloons", False, False),
+        ("chats", True, False),
     ):
-        norm = normalize_metric_series(series.get(key), cumulative=cumulative)
+        norm = normalize_metric_series(
+            series.get(key), cumulative=cumulative, keep_max=keep_max
+        )
         if norm != series.get(key):
             series[key] = norm
             changed = True
     return changed
+
+
+def apply_peak_viewers_to_series(
+    viewers: list[Any] | None,
+    *,
+    peak_viewers: int | None,
+    peak_viewers_at: str | None,
+) -> list[dict[str, Any]]:
+    """세션 최고 시청을 해당 분 버킷에 반영.
+
+    분 버킷이 마지막 샘플을 남기면 피크(2066)가 같은 분의 이후 값(952)에
+    덮일 수 있다. 카드의 peakViewers를 그 분에 다시 심는다.
+    """
+    out: list[dict[str, Any]] = []
+    for row in viewers or []:
+        if not isinstance(row, dict):
+            continue
+        at = str(row.get("at") or "").strip()
+        if not at:
+            continue
+        try:
+            v = int(row.get("v") or 0)
+        except (TypeError, ValueError):
+            continue
+        out.append({"at": at, "v": v})
+    try:
+        peak = int(peak_viewers or 0)
+    except (TypeError, ValueError):
+        peak = 0
+    parsed = parse_iso(str(peak_viewers_at or "").strip())
+    if peak <= 0 or not parsed:
+        return out
+    at_iso = _minute_bucket_iso(parsed)
+    for row in out:
+        if str(row.get("at") or "") == at_iso:
+            row["v"] = max(int(row.get("v") or 0), peak)
+            return out
+    out.append({"at": at_iso, "v": peak})
+    out.sort(key=lambda row: str(row.get("at") or ""))
+    return out
 
 
 def record_chat_metric(session: dict[str, Any], *, at: str | None = None, delta: int = 1) -> bool:

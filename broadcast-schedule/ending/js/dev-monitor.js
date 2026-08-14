@@ -322,6 +322,37 @@
       .map((p) => ({ at: String(p.at), v: Number(p.v) }));
   }
 
+  function chartMinuteMs(at) {
+    const d = parseChartDate(at);
+    if (!d) return 0;
+    return Date.UTC(
+      d.getUTCFullYear(),
+      d.getUTCMonth(),
+      d.getUTCDate(),
+      d.getUTCHours(),
+      d.getUTCMinutes()
+    );
+  }
+
+  function applyViewerPeakToPoints(points, counts) {
+    const list = (Array.isArray(points) ? points : []).map((p) => ({
+      at: String(p.at),
+      v: Number(p.v),
+    }));
+    const peak = Math.max(0, Number(counts?.peakViewers) || 0);
+    const peakMs = chartMinuteMs(counts?.peakViewersAt);
+    if (peak <= 0 || !peakMs) return list;
+    const hit = list.find((p) => chartMinuteMs(p.at) === peakMs);
+    if (hit) {
+      hit.v = Math.max(hit.v, peak);
+      return list;
+    }
+    const at = new Date(peakMs).toISOString().replace(/\.\d{3}Z$/, "Z");
+    list.push({ at, v: peak });
+    list.sort((a, b) => chartMinuteMs(a.at) - chartMinuteMs(b.at));
+    return list;
+  }
+
   function peakSeriesPoint(points) {
     let best = null;
     for (const p of Array.isArray(points) ? points : []) {
@@ -444,6 +475,7 @@
   const CHART_HEADROOM = 0.12;
   const CHART_X_INSET = 6;
   const CHART_Y_INSET = 5;
+  const CHART_MIN_PX_PER_POINT = 6;
   const CHART_PAD_SINGLE = { t: 18, r: 40, b: 30, l: 48 };
   const CHART_PAD_DUAL = { t: 18, r: 58, b: 30, l: 48 };
 
@@ -451,6 +483,15 @@
     const p = Math.max(0, Number(peak) || 0);
     if (p <= 0) return 1;
     return Math.max(1, Math.ceil(p * (1 + CHART_HEADROOM)));
+  }
+
+  function chartPixelWidth(count, pad, minW = CHART_W) {
+    const n = Math.max(1, Number(count) || 1);
+    const inner = Math.max(0, (n - 1) * CHART_MIN_PX_PER_POINT);
+    return Math.max(
+      minW,
+      Math.round((pad?.l || 0) + (pad?.r || 0) + CHART_X_INSET * 2 + inner)
+    );
   }
 
   function chartAxisLayout(count, pad, w, h, maxV, opts = {}) {
@@ -1084,6 +1125,31 @@
     return links;
   }
 
+  function renderPeakMark(peak, x, y, extraClass) {
+    if (!peak || !Number.isFinite(Number(x)) || !Number.isFinite(Number(y))) return "";
+    const v = Number(peak.v);
+    if (!Number.isFinite(v) || v <= 0) return "";
+    const cls = extraClass ? ` ending-dev-chart__peak ${extraClass}` : " ending-dev-chart__peak";
+    return `<g class="${cls.trim()}" pointer-events="none">
+      <circle cx="${Number(x).toFixed(1)}" cy="${Number(y).toFixed(1)}" r="3.2" vector-effect="non-scaling-stroke" />
+      <text x="${Number(x).toFixed(1)}" y="${(Number(y) - 8).toFixed(1)}" text-anchor="middle">${esc(
+        fmtNum(v)
+      )}</text>
+    </g>`;
+  }
+
+  function scrollChartXIntoView(wrap, chartX) {
+    const scroller = wrap?.closest?.(".ending-dev-chart__scroll");
+    if (!scroller) return;
+    const svg = wrap.querySelector("[data-chart-svg]");
+    const rect = svg?.getBoundingClientRect?.();
+    const logicalW = Number(wrap.dataset.chartWidth) || CHART_W;
+    const drawnW = rect?.width || wrap.offsetWidth || logicalW;
+    if (!drawnW) return;
+    const px = (Number(chartX) / logicalW) * drawnW;
+    scroller.scrollLeft = Math.max(0, px - scroller.clientWidth / 2);
+  }
+
   let chartBindToken = 0;
   let chartPinnedAt = "";
 
@@ -1159,15 +1225,14 @@
       const p = nearestSeriesPointAtTime(points, at);
       if (!p) return;
       const idx = points.findIndex((row) => row.at === p.at);
-      pinHit(
-        {
-          at: p.at,
-          v: p.v,
-          chartX: xAt(idx >= 0 ? idx : 0),
-          index: idx,
-        },
-        { openTab: true }
-      );
+      const hit = {
+        at: p.at,
+        v: p.v,
+        chartX: xAt(idx >= 0 ? idx : 0),
+        index: idx,
+      };
+      pinHit(hit, { openTab: true });
+      scrollChartXIntoView(wrap, hit.chartX);
     }
 
     overlay.addEventListener("mousemove", (ev) => {
@@ -1310,7 +1375,9 @@
 
     function jumpToAt(at) {
       const want = parseChartDate(at)?.getTime();
-      pinSnap(nearestMergedPointAtTime(merged, want), { openTab: true });
+      const snap = nearestMergedPointAtTime(merged, want);
+      pinSnap(snap, { openTab: true });
+      if (snap) scrollChartXIntoView(wrap, xAtTime(snap.at));
     }
 
     overlay.addEventListener("mousemove", (ev) => {
@@ -1337,9 +1404,9 @@
     if (!points.length) {
       return `<p class="ending-dev-empty ending-dev-data-empty">${esc(emptyMsg)}</p>`;
     }
-    const w = CHART_W;
     const h = CHART_H;
     const pad = CHART_PAD_SINGLE;
+    const w = chartPixelWidth(points.length, pad);
     const maxV = chartScaleMax(Math.max(...points.map((p) => p.v), 0));
     const { innerW, innerH, xAt, yAt } = chartAxisLayout(points.length, pad, w, h, maxV);
     const linePts = points.map((p, i) => ({
@@ -1373,24 +1440,40 @@
     const areaColor = o.areaColor || "rgba(47, 95, 154, 0.12)";
     const meta = typeof o.meta === "function" ? o.meta(points, maxV) : String(o.meta || "");
     const jumps = Array.isArray(o.jumps) ? o.jumps.filter(Boolean) : [];
+    const peakJump = jumps.find((j) => j && j.kind !== "chat") || jumps[0];
+    let peakMark = "";
+    if (peakJump) {
+      let idx = points.findIndex((p) => p.at === peakJump.at);
+      if (idx < 0) {
+        const want = chartMinuteMs(peakJump.at);
+        idx = points.findIndex((p) => chartMinuteMs(p.at) === want);
+      }
+      if (idx >= 0) {
+        const peakV = Math.max(Number(peakJump.v) || 0, Number(points[idx].v) || 0);
+        peakMark = renderPeakMark({ v: peakV }, xAt(idx), yAt(peakV));
+      }
+    }
     return `<div class="ending-dev-chart">
       ${renderPeakJumpBar(jumps)}
       ${renderChartMeta(meta)}
       <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
-      <div class="ending-dev-chart__wrap" data-chart-wrap
+      <div class="ending-dev-chart__scroll">
+      <div class="ending-dev-chart__wrap" data-chart-wrap style="min-width:${w}px"
         data-chart-width="${w}" data-chart-height="${h}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
-        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${esc(o.ariaLabel || "추이")}">
+        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${esc(o.ariaLabel || "추이")}">
           ${yLines}
           <path class="ending-dev-chart__area" style="fill:${esc(areaColor)}" d="${area}" />
           <path class="ending-dev-chart__line" style="stroke:${esc(lineColor)}" d="${line}" />
           ${xLabels}
+          ${peakMark}
           <circle class="ending-dev-chart__marker" data-chart-marker hidden vector-effect="non-scaling-stroke" cx="0" cy="0" r="3.5" />
           <line class="ending-dev-chart__cursor" data-chart-cursor hidden x1="0" y1="0" x2="0" y2="0" />
         </svg>
         <div class="ending-dev-chart__overlay" data-chart-overlay aria-hidden="true"></div>
+      </div>
       </div>
       <div class="ending-dev-chart__replay" data-chart-replay hidden>
         <p class="ending-dev-chart__replay-meta" data-replay-meta></p>
@@ -1423,7 +1506,7 @@
   }
 
   function renderDualMetricChartPanel(viewerPoints, chatPoints, counts, replay) {
-    const viewers = seriesPoints(viewerPoints);
+    const viewers = applyViewerPeakToPoints(seriesPoints(viewerPoints), counts);
     const chats = seriesPoints(chatPoints);
     const merged = mergeMetricsTimeline(viewers, chats);
     if (!merged.length) {
@@ -1432,7 +1515,6 @@
         bind: null,
       };
     }
-    const w = CHART_W;
     const h = CHART_H;
     const pad = CHART_PAD_DUAL;
     const timeRange = chartTimeRangeFromPoints(viewers, chats);
@@ -1443,6 +1525,8 @@
       };
     }
     const { minMs, maxMs } = timeRange;
+    const minuteCount = Math.max(2, Math.round((maxMs - minMs) / 60_000) + 1);
+    const w = chartPixelWidth(minuteCount, pad);
     const maxViewers = chartScaleMax(Math.max(...viewers.map((p) => p.v), 0));
     const maxChats = chartScaleMax(Math.max(...chats.map((p) => p.v), 0));
     const { innerH, xAtTime, yViewers, yChats } = chartDualTimeLayout(
@@ -1495,6 +1579,25 @@
     ]
       .filter(Boolean)
       .join(" · ");
+    const peakMarks = `${
+      viewerPeak
+        ? renderPeakMark(
+            viewerPeak,
+            xAtTime(viewerPeak.at),
+            yViewers(viewerPeak.v),
+            "ending-dev-chart__peak--viewers"
+          )
+        : ""
+    }${
+      chatPeak
+        ? renderPeakMark(
+            chatPeak,
+            xAtTime(chatPeak.at),
+            yChats(chatPeak.v),
+            "ending-dev-chart__peak--chat"
+          )
+        : ""
+    }`;
     return {
       html: `<div class="ending-dev-chart ending-dev-chart--dual">
       ${renderPeakJumpBar([viewerPeak, chatPeak])}
@@ -1506,20 +1609,23 @@
       <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
-      <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1"
+      <div class="ending-dev-chart__scroll">
+      <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1" style="min-width:${w}px"
         data-chart-width="${w}" data-chart-height="${h}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
-        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="시청자·채팅 화력 추이">
+        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="시청자·채팅 화력 추이">
           ${yLines}
           ${yRight}
           ${viewerLine ? `<path class="ending-dev-chart__line ending-dev-chart__line--viewers" d="${viewerLine}" />` : ""}
           ${chatLine ? `<path class="ending-dev-chart__line ending-dev-chart__line--chat" d="${chatLine}" />` : ""}
           ${xLabels}
+          ${peakMarks}
           <circle class="ending-dev-chart__marker ending-dev-chart__marker--viewers" data-chart-marker-viewers hidden vector-effect="non-scaling-stroke" cx="0" cy="0" r="3.5" />
           <circle class="ending-dev-chart__marker ending-dev-chart__marker--chat" data-chart-marker-chats hidden vector-effect="non-scaling-stroke" cx="0" cy="0" r="3.5" />
           <line class="ending-dev-chart__cursor" data-chart-cursor hidden x1="0" y1="0" x2="0" y2="0" />
         </svg>
         <div class="ending-dev-chart__overlay" data-chart-overlay aria-hidden="true"></div>
+      </div>
       </div>
       <div class="ending-dev-chart__replay" data-chart-replay hidden>
         <p class="ending-dev-chart__replay-meta" data-replay-meta></p>
@@ -1563,7 +1669,7 @@
   }
 
   function renderViewersChartPanel(metricsSeries, counts, replay) {
-    const points = seriesPoints(metricsSeries?.viewers);
+    const points = applyViewerPeakToPoints(seriesPoints(metricsSeries?.viewers), counts);
     const last = Number(counts?.lastViewerCount) || points[points.length - 1]?.v || 0;
     const viewerPeak = resolveViewerPeak(points, counts);
     return {

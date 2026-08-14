@@ -1316,6 +1316,13 @@
   padding-right: 0;
 }
 
+.ending-dev-chart__scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 .ending-dev-chart--dual .ending-dev-chart__wrap {
   padding-right: 0;
 }
@@ -1508,6 +1515,30 @@
 
 .ending-dev-chart__marker--chat {
   stroke: #c45c26;
+}
+
+.ending-dev-chart__peak circle {
+  fill: #fff;
+  stroke: var(--dev-blue);
+  stroke-width: 2;
+}
+
+.ending-dev-chart__peak text {
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--dev-blue);
+  font-family: var(--dev-mono);
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+}
+
+.ending-dev-chart__peak--chat circle {
+  stroke: #c45c26;
+}
+
+.ending-dev-chart__peak--chat text {
+  fill: #c45c26;
 }
 
 .ending-dev-chart__tip-row {
