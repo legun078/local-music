@@ -40,6 +40,7 @@
   const DATA_LIMIT_KEY = "ending_dev_monitor_data_limit";
   const METRICS_CHART_MODE_KEY = "ending_dev_monitor_metrics_chart_mode";
   const VIEW_KEY = "ending_dev_monitor_view";
+  const SCROLL_STATE_KEY = "ending_dev_monitor_scroll";
   const METRICS_CHART_MODES = [
     { value: "both", label: "겹침" },
     { value: "viewers", label: "시청자" },
@@ -65,6 +66,8 @@
   let historyPayload = null;
   let historyListCache = [];
   let historyBusy = false;
+  let scrollRestorePending = null;
+  let scrollPersistTimer = null;
 
   try {
     dataTabId = String(sessionStorage.getItem(DATA_TAB_KEY) || "").trim();
@@ -2087,6 +2090,79 @@
     };
   }
 
+  function captureScrollState(root) {
+    const state = {
+      windowY: window.scrollY || window.pageYOffset || 0,
+      cards: {},
+      charts: [],
+    };
+    if (!root) return state;
+    root.querySelectorAll(".ending-dev-overview-card").forEach((card) => {
+      const cat = card.getAttribute("data-cat");
+      const body = card.querySelector(".ending-dev-overview-card__body.is-scrollable");
+      if (cat && body) state.cards[cat] = body.scrollTop;
+    });
+    root.querySelectorAll(".ending-dev-chart__scroll").forEach((el) => {
+      state.charts.push(el.scrollLeft);
+    });
+    return state;
+  }
+
+  function restoreScrollState(root, state) {
+    if (!root || !state) return;
+    Object.entries(state.cards || {}).forEach(([cat, top]) => {
+      const card = root.querySelector(`.ending-dev-overview-card[data-cat="${cat}"]`);
+      const body = card?.querySelector(".ending-dev-overview-card__body.is-scrollable");
+      if (body && typeof top === "number") body.scrollTop = top;
+    });
+    const charts = root.querySelectorAll(".ending-dev-chart__scroll");
+    (state.charts || []).forEach((left, i) => {
+      if (charts[i] && typeof left === "number") charts[i].scrollLeft = left;
+    });
+    const y = Number(state.windowY);
+    if (Number.isFinite(y) && y > 0) {
+      requestAnimationFrame(() => {
+        window.scrollTo(0, y);
+        requestAnimationFrame(() => window.scrollTo(0, y));
+      });
+    }
+  }
+
+  function persistScrollState(state) {
+    if (!state) return;
+    try {
+      sessionStorage.setItem(SCROLL_STATE_KEY, JSON.stringify(state));
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function loadPersistedScrollState() {
+    try {
+      const raw = sessionStorage.getItem(SCROLL_STATE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function scheduleScrollPersist() {
+    if (scrollPersistTimer) clearTimeout(scrollPersistTimer);
+    scrollPersistTimer = setTimeout(() => {
+      if (!els.dataBody) return;
+      persistScrollState(captureScrollState(els.dataBody));
+    }, 150);
+  }
+
+  try {
+    scrollRestorePending = loadPersistedScrollState();
+  } catch (_) {
+    scrollRestorePending = null;
+  }
+
   function renderDataList(items, opts = {}) {
     const compact = Boolean(opts.compact);
     const list = Array.isArray(items) ? items : [];
@@ -2143,10 +2219,16 @@
       return;
     }
 
+    const scrollState = scrollRestorePending || captureScrollState(els.dataBody);
+    scrollRestorePending = null;
+
     const overview = renderOverviewPanel(cats, collected);
     els.dataBody.innerHTML = overview.html;
     if (overview.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, overview.bind);
     else if (overview.bind) mountMetricChartInteraction(els.dataBody, overview.bind);
+
+    restoreScrollState(els.dataBody, scrollState);
+    requestAnimationFrame(() => persistScrollState(captureScrollState(els.dataBody)));
   }
 
   function onChartModeClick(mode) {
@@ -2553,6 +2635,8 @@
   });
   els.refresh?.addEventListener("click", () => refresh());
   els.auto?.addEventListener("change", () => schedule());
+  window.addEventListener("scroll", scheduleScrollPersist, { passive: true });
+  els.dataBody?.addEventListener("scroll", scheduleScrollPersist, { passive: true, capture: true });
 
   refresh().then(() => schedule());
 })();
