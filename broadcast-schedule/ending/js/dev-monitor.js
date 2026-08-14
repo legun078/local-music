@@ -47,7 +47,6 @@
   const DATA_LIMIT_KEY = "ending_dev_monitor_data_limit";
   const METRICS_CHART_MODE_KEY = "ending_dev_monitor_metrics_chart_mode";
   const CHART_ZOOM_STORAGE_KEY = "ending_dev_chart_zoom";
-  const CHART_PAN_STORAGE_KEY = "ending_dev_chart_pan";
   const VIEW_KEY = "ending_dev_monitor_view";
   const SCROLL_STATE_KEY = "ending_dev_monitor_scroll";
   const METRICS_CHART_MODES = [
@@ -532,67 +531,38 @@
     } catch (_) {
       /* ignore */
     }
-    if (chartIsFitZoom(z)) {
-      setChartPanLevel(0, { skipRender: true });
-    }
     if (!lastData) return;
     const acc = resolveAccount(lastData, activeTab);
     renderDataPanel(acc.sections, (acc.session || {}).collected || {});
   }
 
-  function chartPanLevel() {
-    const stored = Number(sessionStorage.getItem(CHART_PAN_STORAGE_KEY));
-    if (Number.isFinite(stored) && stored >= 0 && stored <= 1) {
-      return stored;
-    }
-    return 0;
-  }
-
-  function setChartPanLevel(pan, { skipRender = false } = {}) {
-    const p = Math.max(0, Math.min(1, Number(pan) || 0));
-    try {
-      sessionStorage.setItem(CHART_PAN_STORAGE_KEY, String(p));
-    } catch (_) {
-      /* ignore */
-    }
-    if (skipRender) {
-      applyChartViewBox(els.dataBody);
-      return;
-    }
-    if (!lastData) return;
-    const acc = resolveAccount(lastData, activeTab);
-    renderDataPanel(acc.sections, (acc.session || {}).collected || {});
-  }
-
-  function chartViewBoxMetrics(zoom = chartZoomLevel(), pan = chartPanLevel(), w = CHART_W, h = CHART_H) {
-    const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
-    const visibleW = w / z;
-    const maxPan = Math.max(0, w - visibleW);
-    const panX = maxPan * Math.max(0, Math.min(1, Number(pan) || 0));
-    return { x: panX, w: visibleW, h, maxPan, panX, zoom: z };
-  }
-
-  function applyChartViewBox(root) {
+  function applyChartScrollZoom(root) {
     if (!root) return;
-    root.querySelectorAll("[data-chart-wrap]").forEach((wrap) => {
+    const zoom = chartZoomLevel();
+    const fit = chartIsFitZoom(zoom);
+    root.querySelectorAll(".ending-dev-chart__scroll").forEach((scroller) => {
+      const wrap = scroller.querySelector("[data-chart-wrap]");
+      if (!wrap) return;
       const svg = wrap.querySelector("[data-chart-svg]");
-      if (!svg) return;
       const w = Number(wrap.dataset.chartWidth) || CHART_W;
       const h = Number(wrap.dataset.chartHeight) || CHART_H;
-      const vb = chartViewBoxMetrics(chartZoomLevel(), chartPanLevel(), w, h);
-      svg.setAttribute("viewBox", `${vb.x.toFixed(2)} 0 ${vb.w.toFixed(2)} ${h}`);
-      svg.setAttribute("preserveAspectRatio", "xMinYMid meet");
-      wrap.style.width = "100%";
-      wrap.style.minWidth = "";
+      if (svg) {
+        svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+        svg.setAttribute("preserveAspectRatio", "xMinYMid slice");
+      }
+      if (fit) {
+        wrap.style.width = "100%";
+        wrap.style.minWidth = "";
+        scroller.classList.remove("is-zoomed");
+        scroller.scrollLeft = 0;
+        return;
+      }
+      const base = Math.max(240, scroller.clientWidth || CHART_W);
+      const minW = Math.round(base * zoom);
+      wrap.style.width = `${minW}px`;
+      wrap.style.minWidth = `${minW}px`;
+      scroller.classList.add("is-zoomed");
     });
-  }
-
-  function chartPanToCenterX(wrap, chartX) {
-    const w = Number(wrap?.dataset?.chartWidth) || CHART_W;
-    const vb = chartViewBoxMetrics(chartZoomLevel(), chartPanLevel(), w);
-    if (chartIsFitZoom(vb.zoom) || vb.maxPan <= 0) return;
-    const targetPanX = Math.max(0, Math.min(vb.maxPan, Number(chartX) - vb.w / 2));
-    setChartPanLevel(vb.maxPan > 0 ? targetPanX / vb.maxPan : 0, { skipRender: true });
   }
 
   function chartZoomSliderValue(zoom) {
@@ -623,18 +593,12 @@
   function renderChartZoomControls() {
     const zoom = chartZoomLevel();
     const slider = chartZoomSliderValue(zoom);
-    const panSlider = Math.round(chartPanLevel() * 100);
-    const panHtml = chartIsFitZoom(zoom)
-      ? ""
-      : `<span class="ending-dev-chart__zoom-label ending-dev-chart__zoom-label--pan">이동</span>
-      <input type="range" class="ending-dev-chart__zoom-range ending-dev-chart__zoom-range--pan" data-chart-pan-range min="0" max="100" step="1" value="${panSlider}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${panSlider}" aria-label="그래프 시간 구간 이동" />`;
     return `<div class="ending-dev-chart__zoom" role="group" aria-label="그래프 X축 확대">
       <span class="ending-dev-chart__zoom-label">X축</span>
       <button type="button" class="ending-dev-chart__zoom-btn" data-chart-zoom="out" aria-label="축소">−</button>
       <input type="range" class="ending-dev-chart__zoom-range" data-chart-zoom-range min="0" max="100" step="1" value="${slider}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${slider}" aria-label="그래프 X축 확대" />
       <button type="button" class="ending-dev-chart__zoom-btn" data-chart-zoom="in" aria-label="확대">+</button>
       <button type="button" class="ending-dev-chart__zoom-btn ending-dev-chart__zoom-btn--fit" data-chart-zoom="fit" aria-label="전체 보기">전체</button>
-      ${panHtml}
       <span class="ending-dev-chart__zoom-readout" data-chart-zoom-readout>${esc(chartZoomLabel(zoom))}</span>
     </div>`;
   }
@@ -1367,7 +1331,15 @@
   }
 
   function scrollChartXIntoView(wrap, chartX) {
-    chartPanToCenterX(wrap, chartX);
+    const scroller = wrap?.closest?.(".ending-dev-chart__scroll");
+    if (!scroller || chartIsFitZoom()) return;
+    const svg = wrap.querySelector("[data-chart-svg]");
+    const rect = svg?.getBoundingClientRect?.();
+    const logicalW = Number(wrap.dataset.chartWidth) || CHART_W;
+    const drawnW = rect?.width || wrap.offsetWidth || logicalW;
+    if (!drawnW) return;
+    const px = (Number(chartX) / logicalW) * drawnW;
+    scroller.scrollLeft = Math.max(0, px - scroller.clientWidth / 2);
   }
 
   let chartBindToken = 0;
@@ -2285,7 +2257,13 @@
       const body = card.querySelector(".ending-dev-overview-card__body.is-scrollable");
       if (cat && body) state.cards[cat] = body.scrollTop;
     });
-    /* chart X pan is persisted separately; no horizontal scroll restore */
+    root.querySelectorAll(".ending-dev-chart__scroll").forEach((el) => {
+      if (chartIsFitZoom()) {
+        state.charts.push(0);
+        return;
+      }
+      state.charts.push(el.scrollLeft);
+    });
     return state;
   }
 
@@ -2295,6 +2273,15 @@
       const card = root.querySelector(`.ending-dev-overview-card[data-cat="${cat}"]`);
       const body = card?.querySelector(".ending-dev-overview-card__body.is-scrollable");
       if (body && typeof top === "number") body.scrollTop = top;
+    });
+    const charts = root.querySelectorAll(".ending-dev-chart__scroll");
+    (state.charts || []).forEach((left, i) => {
+      if (!charts[i]) return;
+      if (chartIsFitZoom()) {
+        charts[i].scrollLeft = 0;
+        return;
+      }
+      if (typeof left === "number") charts[i].scrollLeft = left;
     });
     const y = Number(state.windowY);
     if (Number.isFinite(y) && y > 0) {
@@ -2404,17 +2391,13 @@
     if (overview.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, overview.bind);
     else if (overview.bind) mountMetricChartInteraction(els.dataBody, overview.bind);
 
-    applyChartViewBox(els.dataBody);
+    applyChartScrollZoom(els.dataBody);
     restoreScrollState(els.dataBody, scrollState);
     requestAnimationFrame(() => {
-      applyChartViewBox(els.dataBody);
+      applyChartScrollZoom(els.dataBody);
       restoreScrollState(els.dataBody, scrollState);
       persistScrollState(captureScrollState(els.dataBody));
     });
-  }
-
-  function onChartPanAction(value) {
-    setChartPanLevel(Number(value) / 100, { skipRender: true });
   }
 
   function onChartZoomAction(action, value) {
@@ -2897,10 +2880,6 @@
     if (!ev.target?.matches?.("[data-chart-zoom-range]")) return;
     onChartZoomAction("range", ev.target.value);
   });
-  els.dataBody?.addEventListener("input", (ev) => {
-    if (!ev.target?.matches?.("[data-chart-pan-range]")) return;
-    onChartPanAction(ev.target.value);
-  });
   els.refresh?.addEventListener("click", () => refresh());
   els.auto?.addEventListener("change", () => schedule());
   window.addEventListener("scroll", scheduleScrollPersist, { passive: true });
@@ -2909,7 +2888,7 @@
     "resize",
     () => {
       if (!els.dataBody) return;
-      applyChartViewBox(els.dataBody);
+      applyChartScrollZoom(els.dataBody);
     },
     { passive: true }
   );

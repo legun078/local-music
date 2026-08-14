@@ -1675,17 +1675,14 @@ html.ending-oauth-busy body::before {
 
 .ending-dev-chart__scroll {
   width: 100%;
-  overflow: hidden;
+  max-height: 176px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
-.ending-dev-chart__zoom-label--pan {
-  margin-left: 0.15rem;
-}
-
-.ending-dev-chart__zoom-range--pan {
-  flex: 1 1 5rem;
-  min-width: 4.5rem;
-  max-width: 9rem;
+.ending-dev-chart__scroll:not(.is-zoomed) {
+  overflow-x: hidden;
 }
 
 .ending-dev-chart--dual .ending-dev-chart__wrap {
@@ -1694,7 +1691,8 @@ html.ending-oauth-busy body::before {
 
 .ending-dev-chart__svg {
   width: 100%;
-  height: auto;
+  height: 176px;
+  max-height: 176px;
   display: block;
   overflow: visible;
   pointer-events: none;
