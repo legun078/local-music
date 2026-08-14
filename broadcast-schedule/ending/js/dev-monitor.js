@@ -548,7 +548,7 @@
       const h = Number(wrap.dataset.chartHeight) || CHART_H;
       if (svg) {
         svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-        svg.setAttribute("preserveAspectRatio", "xMinYMid slice");
+        svg.setAttribute("preserveAspectRatio", "none");
       }
       if (fit) {
         wrap.style.width = "100%";
@@ -1643,7 +1643,7 @@
       <div class="ending-dev-chart__wrap" data-chart-wrap
         data-chart-width="${CHART_W}" data-chart-height="${h}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
-        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${esc(o.ariaLabel || "추이")}">
+        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="${esc(o.ariaLabel || "추이")}">
           ${yLines}
           <path class="ending-dev-chart__area" style="fill:${esc(areaColor)}" d="${area}" />
           <path class="ending-dev-chart__line" style="stroke:${esc(lineColor)}" d="${line}" />
@@ -1773,7 +1773,7 @@
       <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1"
         data-chart-width="${CHART_W}" data-chart-height="${h}"
         data-chart-pad="${esc(JSON.stringify(pad))}">
-        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="시청자·채팅 화력 추이">
+        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="시청자·채팅 화력 추이">
           ${yLines}
           ${yRight}
           ${viewerLine ? `<path class="ending-dev-chart__line ending-dev-chart__line--viewers" d="${viewerLine}" />` : ""}
