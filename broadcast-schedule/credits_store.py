@@ -1003,6 +1003,7 @@ INGEST_TRACKED_ACTIONS = (
     | GEM_ACTIONS
 )
 DONATION_NOTES_MAX = 800
+SSAPI_FEED_MAX = 200
 
 MISSION_STATUS_LABELS = {
     "pending": "보류",
@@ -1241,6 +1242,113 @@ def note_mission_fanlist(session: dict[str, Any], msg: dict[str, Any]) -> dict[s
     return run
 
 
+def ensure_ssapi_feed(session: dict[str, Any] | None) -> list[dict[str, Any]]:
+    session = session if isinstance(session, dict) else {}
+    feed = session.get("ssapiFeed")
+    if not isinstance(feed, list):
+        feed = []
+        session["ssapiFeed"] = feed
+    return feed
+
+
+def note_ssapi_feed(
+    session: dict[str, Any],
+    *,
+    kind: str,
+    ts: str,
+    phase: str = "",
+    key: str = "",
+    title: str = "",
+    status: str = "",
+    winner: str = "",
+    mission_type: str = "",
+    name: str = "",
+    user_id: str = "",
+    count: int | str = 0,
+    text: str = "",
+    note_id: str = "",
+) -> dict[str, Any]:
+    """SSAPI가 준 이벤트만 개발자 모니터용으로 남긴다."""
+    try:
+        amount = int(count or 0)
+    except (TypeError, ValueError):
+        amount = 0
+    feed = ensure_ssapi_feed(session)
+    nid = str(note_id or "").strip()
+    if nid:
+        for row in reversed(feed[-30:]):
+            if isinstance(row, dict) and str(row.get("id") or "") == nid:
+                return row
+    row = {
+        "id": nid or f"s{len(feed) + 1}",
+        "kind": "donation" if str(kind or "") == "donation" else "mission",
+        "at": ts or utc_now_iso(),
+        "phase": str(phase or "").strip(),
+        "key": str(key or "").strip(),
+        "title": str(title or "").strip()[:80],
+        "status": str(status or "").strip(),
+        "winner": str(winner or "").strip()[:40],
+        "missionType": str(mission_type or "").strip(),
+        "name": str(name or "").strip(),
+        "userId": str(user_id or "").strip(),
+        "count": amount,
+        "text": str(text or "").strip()[:200],
+    }
+    feed.append(row)
+    if len(feed) > SSAPI_FEED_MAX:
+        del feed[: len(feed) - SSAPI_FEED_MAX]
+    return row
+
+
+def serialize_ssapi_assist(session: dict[str, Any] | None) -> dict[str, Any]:
+    feed = session.get("ssapiFeed") if isinstance(session, dict) else None
+    if not isinstance(feed, list):
+        feed = []
+    events: list[dict[str, Any]] = []
+    missions: list[dict[str, Any]] = []
+    donations: list[dict[str, Any]] = []
+    for raw in feed:
+        if not isinstance(raw, dict):
+            continue
+        kind = str(raw.get("kind") or "").strip() or "mission"
+        try:
+            count = int(raw.get("count") or 0)
+        except (TypeError, ValueError):
+            count = 0
+        row = {
+            "id": str(raw.get("id") or ""),
+            "kind": kind,
+            "at": str(raw.get("at") or ""),
+            "phase": str(raw.get("phase") or ""),
+            "key": str(raw.get("key") or ""),
+            "title": str(raw.get("title") or ""),
+            "status": str(raw.get("status") or ""),
+            "statusLabel": mission_status_label(str(raw.get("status") or ""))
+            if raw.get("status")
+            else "",
+            "winner": str(raw.get("winner") or ""),
+            "missionType": str(raw.get("missionType") or ""),
+            "name": str(raw.get("name") or raw.get("userId") or ""),
+            "userId": str(raw.get("userId") or ""),
+            "count": count,
+            "value": f"{count:,}개" if count > 0 else "",
+            "text": str(raw.get("text") or ""),
+        }
+        events.append(row)
+        if kind == "donation":
+            donations.append(row)
+        else:
+            missions.append(row)
+    return {
+        "events": events,
+        "missions": missions,
+        "donations": donations,
+        "missionCount": len(missions),
+        "donationCount": len(donations),
+        "eventCount": len(events),
+    }
+
+
 def mission_kind_from_ssapi(payload: dict[str, Any] | None) -> str:
     raw = payload if isinstance(payload, dict) else {}
     mission_type = str(raw.get("mission_type") or raw.get("missionType") or "").strip().upper()
@@ -1272,6 +1380,13 @@ def apply_ssapi_mission(
         run["title"] = title
     if not run.get("startedAt"):
         run["startedAt"] = at
+    run["fromSsapi"] = True
+    if title:
+        run["ssapiTitle"] = title
+    if key:
+        run["ssapiKey"] = key
+    run["ssapiPhase"] = phase
+    run["ssapiAt"] = at
 
     if phase == "result":
         result = msg.get("result") if isinstance(msg.get("result"), dict) else {}
@@ -1287,9 +1402,8 @@ def apply_ssapi_mission(
         winner = str(result.get("winner") or "").strip()
         if winner:
             run["winner"] = winner[:40]
-        return run
 
-    if phase == "settle":
+    elif phase == "settle":
         run["settledAt"] = at
         settle = msg.get("settle") if isinstance(msg.get("settle"), dict) else {}
         donors = settle.get("donors") if isinstance(settle.get("donors"), list) else []
@@ -1312,8 +1426,25 @@ def apply_ssapi_mission(
             filled += 1
         if filled:
             run["settledCount"] = int(run.get("settledCount") or 0) + filled
-        return run
 
+    try:
+        gift_count = int(msg.get("cnt") or msg.get("count") or 0)
+    except (TypeError, ValueError):
+        gift_count = 0
+    note_ssapi_feed(
+        session,
+        kind="mission",
+        ts=at,
+        phase=phase,
+        key=key,
+        title=title or str(run.get("title") or ""),
+        status=str(run.get("status") or "pending"),
+        winner=str(run.get("winner") or ""),
+        mission_type=str(msg.get("mission_type") or msg.get("missionType") or ""),
+        name=str(msg.get("nickname") or msg.get("userNickname") or "").strip(),
+        user_id=str(msg.get("user_id") or msg.get("userId") or "").strip(),
+        count=gift_count,
+    )
     return run
 
 
@@ -1396,13 +1527,27 @@ def apply_ssapi_donation(
         count = int(msg.get("cnt") or msg.get("count") or 0)
     except (TypeError, ValueError):
         count = 0
-    return note_donation_text(
+    uid = str(msg.get("user_id") or msg.get("userId") or "").strip()
+    name = str(msg.get("nickname") or msg.get("userNickname") or "").strip()
+    at = ts or utc_now_iso()
+    note_ssapi_feed(
         session,
-        user_id=str(msg.get("user_id") or msg.get("userId") or "").strip(),
-        name=str(msg.get("nickname") or msg.get("userNickname") or "").strip(),
+        kind="donation",
+        ts=at,
+        phase="donation",
+        name=name,
+        user_id=uid,
         count=count,
         text=text,
-        ts=ts,
+        note_id=str(msg.get("_id") or msg.get("id") or "").strip(),
+    )
+    return note_donation_text(
+        session,
+        user_id=uid,
+        name=name,
+        count=count,
+        text=text,
+        ts=at,
         note_id=str(msg.get("_id") or msg.get("id") or "").strip(),
         action="SSAPI_DONATION",
     )
@@ -1429,6 +1574,8 @@ def serialize_donation_notes(session: dict[str, Any] | None) -> list[dict[str, A
                 "value": f"{count:,}개" if count > 0 else "",
                 "text": text,
                 "at": str(row.get("at") or ""),
+                "action": str(row.get("action") or ""),
+                "fromSsapi": str(row.get("action") or "") == SSAPI_DONATION_ACTION,
             }
         )
     return out
@@ -1478,6 +1625,9 @@ def serialize_mission_runs(session: dict[str, Any] | None) -> list[dict[str, Any
                 "settledCount": int(row.get("settledCount") or 0),
                 "winner": str(row.get("winner") or ""),
                 "donors": donors[:20],
+                "fromSsapi": bool(row.get("fromSsapi")),
+                "key": str(row.get("key") or ""),
+                "ssapiPhase": str(row.get("ssapiPhase") or ""),
             }
         )
     return out
@@ -2396,6 +2546,19 @@ def merge_prior_session_into(session: dict[str, Any], prior: dict[str, Any] | No
         merged_notes.append(row)
     if merged_notes:
         session["donationNotes"] = merged_notes[-DONATION_NOTES_MAX:]
+
+    merged_feed: list[dict[str, Any]] = []
+    seen_feed: set[str] = set()
+    for row in list(prior.get("ssapiFeed") or []) + list(session.get("ssapiFeed") or []):
+        if not isinstance(row, dict):
+            continue
+        key = str(row.get("id") or "").strip() or f"{row.get('kind')}|{row.get('at')}|{row.get('text')}|{row.get('title')}"
+        if key in seen_feed:
+            continue
+        seen_feed.add(key)
+        merged_feed.append(row)
+    if merged_feed:
+        session["ssapiFeed"] = merged_feed[-SSAPI_FEED_MAX:]
 
     # 채팅·후원 등 user-keyed
     for key, count_keys in (
@@ -3337,6 +3500,7 @@ def empty_session(station_id: str = "") -> dict[str, Any]:
         "missions": {},
         "missionRuns": [],
         "donationNotes": [],
+        "ssapiFeed": [],
         "gems": {},
         "chatSdkConnected": False,
         "pendingChatSdk": True,
@@ -4117,6 +4281,7 @@ class CreditsStore:
             "collectorSegments",
             "missionRuns",
             "donationNotes",
+            "ssapiFeed",
         ):
             if not isinstance(data.get(key), list):
                 data[key] = []
@@ -4132,6 +4297,9 @@ class CreditsStore:
         data.setdefault("donationNotes", [])
         if not isinstance(data.get("donationNotes"), list):
             data["donationNotes"] = []
+        data.setdefault("ssapiFeed", [])
+        if not isinstance(data.get("ssapiFeed"), list):
+            data["ssapiFeed"] = []
         data.setdefault("gems", {})
         data.setdefault("balloonTotal", 0)
         data.setdefault("upGain", 0)

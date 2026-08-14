@@ -22,6 +22,7 @@
     label: document.getElementById("acc-label"),
     title: document.getElementById("acc-title"),
     badge: document.getElementById("acc-badge"),
+    ssapiBadge: document.getElementById("acc-ssapi-badge"),
     broadcast: document.getElementById("acc-broadcast"),
     meta: document.getElementById("acc-meta"),
     note: document.getElementById("acc-note"),
@@ -283,6 +284,12 @@
       authFail && !ingestOn
         ? pill(ingestSrc ? `인증 실패 · ${ingestSrc}` : "인증 실패", false, "is-warn")
         : "",
+      (() => {
+        const ssapi = normalizeSsapiAssist(devLiveExtras(live?.collected)?.ssapi || lastData?.ssapi);
+        if (ssapi.connected) return pill("SSAPI", true);
+        if (ssapi.lastError) return pill(`SSAPI · ${ssapi.lastError}`, false, "is-warn");
+        return pill("SSAPI", false);
+      })(),
     ]
       .filter(Boolean)
       .join("");
@@ -387,6 +394,7 @@
     subscribe_renew: "연속구독",
     emoticon: "이모티콘",
     mission: "미션",
+    ssapi: "SSAPI",
     topfan: "열혈",
     quickview: "퀵뷰",
   };
@@ -619,6 +627,142 @@
         })
         .join("")}
     </ol>`;
+  }
+
+  function ssapiPhaseLabel(phase) {
+    const key = String(phase || "").trim().toLowerCase();
+    if (key === "receive") return "시작";
+    if (key === "settle") return "정산";
+    if (key === "result") return "결과";
+    if (key === "donation") return "후원";
+    return key || "이벤트";
+  }
+
+  function normalizeSsapiAssist(raw) {
+    const src = raw && typeof raw === "object" ? raw : {};
+    const events = (Array.isArray(src.events) ? src.events : []).map((row) => {
+      if (!row || typeof row !== "object") return null;
+      const kind = String(row.kind || "").trim() === "donation" ? "donation" : "mission";
+      return {
+        id: String(row.id || ""),
+        kind,
+        at: String(row.at || "").trim(),
+        phase: String(row.phase || "").trim(),
+        phaseLabel: ssapiPhaseLabel(row.phase),
+        key: String(row.key || "").trim(),
+        title: String(row.title || "").trim(),
+        status: String(row.status || "").trim(),
+        statusLabel: String(row.statusLabel || "").trim(),
+        winner: String(row.winner || "").trim(),
+        name: String(row.name || "").trim(),
+        count: Number(row.count) || 0,
+        value: String(row.value || "").trim(),
+        text: String(row.text || "").trim(),
+      };
+    }).filter(Boolean);
+    const missions = events.filter((row) => row.kind === "mission");
+    const donations = events.filter((row) => row.kind === "donation");
+    return {
+      connected: Boolean(src.connected),
+      hasStatus: Boolean(src.hasStatus),
+      lastError: String(src.lastError || "").trim(),
+      lastAction: String(src.lastAction || "").trim(),
+      lastPhase: String(src.lastPhase || "").trim(),
+      lastTitle: String(src.lastTitle || "").trim(),
+      lastIngestAt: String(src.lastIngestAt || "").trim(),
+      updatedAt: String(src.updatedAt || "").trim(),
+      stationId: String(src.stationId || "").trim(),
+      events,
+      missions,
+      donations,
+      missionCount: missions.length,
+      donationCount: donations.length,
+      eventCount: events.length,
+    };
+  }
+
+  function renderSsapiStatus(ssapi) {
+    const on = Boolean(ssapi?.connected);
+    const err = String(ssapi?.lastError || "").trim();
+    const when = ssapi?.lastIngestAt || ssapi?.updatedAt || "";
+    const bits = [
+      on ? "소켓 연결" : err ? `끊김 · ${err}` : "대기",
+      ssapi?.stationId ? `채널 ${ssapi.stationId}` : "",
+      when ? chartClockLabel(when) : "",
+      ssapi?.lastTitle ? ssapi.lastTitle : "",
+    ].filter(Boolean);
+    return `<p class="ending-dev-ssapi__status ${on ? "is-on" : err ? "is-warn" : ""}">${esc(
+      bits.join(" · ") || "SSAPI 상태 없음"
+    )}</p>`;
+  }
+
+  function renderSsapiMissionList(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) {
+      return `<p class="ending-dev-empty ending-dev-data-empty">아직 SSAPI 미션 이벤트가 없습니다. 도전·대결이 열리면 제목·시작·정산·결과가 여기에 쌓입니다.</p>`;
+    }
+    return `<ol class="ending-dev-ssapi-list">
+      ${list
+        .map((row) => {
+          const title = row.title || "미션";
+          const who = row.name ? `<span class="ending-dev-ssapi-list__name">${esc(row.name)}</span>` : "";
+          const amt = row.value ? `<span class="ending-dev-ssapi-list__amt">${esc(row.value)}</span>` : "";
+          const extra = [
+            row.statusLabel && row.phase === "result" ? row.statusLabel : "",
+            row.winner ? `승 ${row.winner}` : "",
+            row.key ? row.key : "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
+          return `<li>
+            <span class="ending-dev-ssapi-list__phase is-${esc(row.phase || "event")}">${esc(row.phaseLabel)}</span>
+            <span class="ending-dev-ssapi-list__title" title="${esc(title)}">${esc(title)}</span>
+            ${who}
+            ${amt}
+            ${row.at ? `<span class="ending-dev-ssapi-list__at">${esc(chartClockLabel(row.at))}</span>` : ""}
+            ${extra ? `<p class="ending-dev-ssapi-list__meta">${esc(extra)}</p>` : ""}
+          </li>`;
+        })
+        .join("")}
+    </ol>`;
+  }
+
+  function renderSsapiDonationList(rows) {
+    const list = Array.isArray(rows) ? rows : [];
+    if (!list.length) {
+      return `<p class="ending-dev-empty ending-dev-data-empty">아직 SSAPI 별풍 메시지가 없습니다. 문구가 있는 일반 별풍이 오면 여기에 쌓입니다.</p>`;
+    }
+    return `<ol class="ending-dev-notes ending-dev-notes--ssapi">
+      ${list
+        .map((row) => {
+          const when = row.at ? `<span class="ending-dev-notes__at">${esc(chartClockLabel(row.at))}</span>` : "";
+          const amt = row.value ? `<span class="ending-dev-notes__amt">${esc(row.value)}</span>` : "";
+          return `<li>
+            <span class="ending-dev-notes__name">${esc(row.name || "익명")}</span>
+            ${amt}
+            ${when}
+            <p class="ending-dev-notes__text">${esc(row.text)}</p>
+          </li>`;
+        })
+        .join("")}
+    </ol>`;
+  }
+
+  function renderSsapiPanel(ssapi) {
+    const data = normalizeSsapiAssist(ssapi);
+    return `<div class="ending-dev-ssapi">
+      ${renderSsapiStatus(data)}
+      <div class="ending-dev-ssapi__grid">
+        <section class="ending-dev-ssapi__card">
+          <h5 class="ending-dev-ssapi__h">미션 · ${esc(fmtNum(data.missionCount))}</h5>
+          ${renderSsapiMissionList(data.missions)}
+        </section>
+        <section class="ending-dev-ssapi__card">
+          <h5 class="ending-dev-ssapi__h">별풍 메시지 · ${esc(fmtNum(data.donationCount))}</h5>
+          ${renderSsapiDonationList(data.donations)}
+        </section>
+      </div>
+    </div>`;
   }
 
   function renderMissionRunsPanel(rows) {
@@ -1377,6 +1521,7 @@
       "subscribe_renew",
       "emoticon",
       "mission",
+      "ssapi",
       "topfan",
       "quickview",
     ];
@@ -1481,6 +1626,17 @@
           items: prevDon?.items || [],
         });
       }
+
+      const ssapi = normalizeSsapiAssist(extras.ssapi);
+      byId.set("ssapi", {
+        id: "ssapi",
+        title: dataTabTitle("ssapi"),
+        count: ssapi.eventCount,
+        pending: ssapi.eventCount === 0,
+        kind: "ssapi",
+        ssapi,
+        items: [],
+      });
     }
 
     const cats = [];
@@ -1605,6 +1761,8 @@
       chartBind = digest.bind;
     } else if (active.kind === "missionRuns") {
       panelBody = renderMissionRunsPanel(active.missionRuns);
+    } else if (active.kind === "ssapi") {
+      panelBody = renderSsapiPanel(active.ssapi);
     } else if (active.kind === "donationNotes") {
       const shown = sliceItemsForLimit(active.items, dataLimit);
       const notes = renderDonationNotes(active.donationNotes);
@@ -1614,7 +1772,8 @@
       panelBody = renderDataList(shown);
     }
     const total = active.items?.length || active.count || 0;
-    const showLimit = active.kind !== "metricsChart" && active.kind !== "missionRuns";
+    const showLimit =
+      active.kind !== "metricsChart" && active.kind !== "missionRuns" && active.kind !== "ssapi";
     const panelHeadExtra =
       active.kind === "metricsChart"
         ? renderChartModeToggles(metricsChartMode)
@@ -1933,7 +2092,23 @@
       <div class="ending-dev-chip">
         <p class="ending-dev-chip__label">채널 ID</p>
         <p class="ending-dev-chip__value"><code>${esc(thisSid || "—")}</code></p>
-      </div>`;
+      </div>
+      ${(() => {
+        const ssapi = normalizeSsapiAssist(data.ssapi || devLiveExtras(sess.collected)?.ssapi);
+        const on = ssapi.connected;
+        const label = on ? "연결" : ssapi.lastError ? "오류" : "대기";
+        return `<div class="ending-dev-chip${on ? " is-live" : ""}">
+          <p class="ending-dev-chip__label">SSAPI</p>
+          <p class="ending-dev-chip__value">${esc(label)}<span class="ending-dev-chip__sub">${esc(
+            [
+              ssapi.eventCount ? `${ssapi.eventCount}건` : "수신 없음",
+              ssapi.lastTitle || "",
+            ]
+              .filter(Boolean)
+              .join(" · ") || "보조 수집"
+          )}</span></p>
+        </div>`;
+      })()}`;
   }
 
   function renderAccount(data) {
@@ -1972,6 +2147,15 @@
       setBadge(els.badge, "세션만 유지", "is-off");
     } else {
       setBadge(els.badge, "대기", "is-off");
+    }
+
+    const ssapi = normalizeSsapiAssist(data.ssapi || devLiveExtras(collected)?.ssapi);
+    if (ssapi.connected) {
+      setBadge(els.ssapiBadge, "SSAPI 연결", "is-on");
+    } else if (ssapi.lastError) {
+      setBadge(els.ssapiBadge, "SSAPI 오류", "is-warn");
+    } else {
+      setBadge(els.ssapiBadge, "SSAPI 대기", "is-off");
     }
 
     setPanelStatus(acc);

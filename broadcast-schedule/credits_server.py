@@ -45,6 +45,7 @@ from credits_store import (
     parse_signature_amounts,
     serialize_donation_notes,
     serialize_mission_runs,
+    serialize_ssapi_assist,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -60,6 +61,9 @@ CREDITS_PATH = DATA_DIR / "credits.json"
 CREDITS_OVERLAY_DIR = DATA_DIR / "credits-overlay"
 CREDITS_OVERLAY_LEGACY = DATA_DIR / "credits-overlay.json"
 CREDITS_OBS_LINKS_PATH = DATA_DIR / "credits-obs-links.json"
+SSAPI_STATUS_PATH = Path(
+    os.environ.get("SSAPI_STATUS_PATH") or (DATA_DIR / "credits-ssapi-status.json")
+)
 
 PORT = int(os.environ.get("CREDITS_PORT", "8017"))
 STATION_ID = (
@@ -991,6 +995,52 @@ def _title_history_preview(session: dict) -> list[dict[str, Any]]:
     return out
 
 
+def read_ssapi_collector_status() -> dict[str, Any]:
+    """보조 수집기 상태 파일. 키·토큰은 넣지 않는다."""
+    empty = {
+        "connected": False,
+        "updatedAt": "",
+        "stationId": "",
+        "lastError": "",
+        "lastAction": "",
+        "lastPhase": "",
+        "lastTitle": "",
+        "lastIngestAt": "",
+        "hasStatus": False,
+    }
+    path = SSAPI_STATUS_PATH
+    if not path.is_file():
+        return empty
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {**empty, "lastError": "status_unreadable"}
+    if not isinstance(raw, dict):
+        return empty
+    err = str(raw.get("lastError") or "").strip()
+    if err.lower() in {"missing_api_key", "stopped"}:
+        connected = False
+    else:
+        connected = bool(raw.get("connected"))
+    return {
+        "connected": connected,
+        "updatedAt": str(raw.get("updatedAt") or ""),
+        "stationId": str(raw.get("stationId") or "").strip(),
+        "lastError": err[:200],
+        "lastAction": str(raw.get("lastAction") or ""),
+        "lastPhase": str(raw.get("lastPhase") or ""),
+        "lastTitle": str(raw.get("lastTitle") or "")[:80],
+        "lastIngestAt": str(raw.get("lastIngestAt") or ""),
+        "hasStatus": True,
+    }
+
+
+def _ssapi_monitor_payload(session: dict | None) -> dict[str, Any]:
+    status = read_ssapi_collector_status()
+    assist = serialize_ssapi_assist(session if isinstance(session, dict) else None)
+    return {**status, **assist}
+
+
 def _dev_monitor_live_extras(session: dict | None) -> dict[str, Any]:
     if not isinstance(session, dict):
         return {
@@ -998,6 +1048,7 @@ def _dev_monitor_live_extras(session: dict | None) -> dict[str, Any]:
             "titleHistory": [],
             "missionRuns": [],
             "donationNotes": [],
+            "ssapi": _ssapi_monitor_payload(None),
             "metricsSeries": {"viewers": [], "up": [], "balloons": [], "chats": []},
             "replay": {},
         }
@@ -1006,6 +1057,7 @@ def _dev_monitor_live_extras(session: dict | None) -> dict[str, Any]:
         "titleHistory": _title_history_preview(session),
         "missionRuns": serialize_mission_runs(session),
         "donationNotes": serialize_donation_notes(session),
+        "ssapi": _ssapi_monitor_payload(session),
         "metricsSeries": _metrics_series_readonly_preview(session),
         "replay": _dev_monitor_replay_context(session),
     }
@@ -1940,6 +1992,7 @@ def api_credits_dev_monitor():
             "viewerStationId": viewer_sid,
             "sirianStationId": sirian_sid,
             "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "ssapi": read_ssapi_collector_status(),
             "live": live,
             "livePreview": live_preview,
             "activeBound": active_bound,

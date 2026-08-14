@@ -20,6 +20,7 @@ from credits_store import (  # noqa: E402
     apply_ssapi_mission,
     serialize_donation_notes,
     serialize_mission_runs,
+    serialize_ssapi_assist,
 )
 from ssapi_mission_collector import decode_ssapi_payload  # noqa: E402
 
@@ -78,6 +79,11 @@ class SsapiMissionTests(unittest.TestCase):
         self.assertEqual(run["status"], "pending")
         self.assertEqual(run["total"], 0)
         self.assertEqual(run["donors"], {})
+        self.assertTrue(run["fromSsapi"])
+        assist = serialize_ssapi_assist(session)
+        self.assertEqual(assist["missionCount"], 1)
+        self.assertEqual(assist["missions"][0]["title"], "히든미션")
+        self.assertEqual(assist["missions"][0]["phase"], "receive")
 
     def test_sdk_gift_merges_into_ssapi_run(self) -> None:
         session = self._session()
@@ -170,6 +176,10 @@ class SsapiMissionTests(unittest.TestCase):
         self.assertEqual(run["endedAt"], "2026-08-13T12:10:00Z")
         rows = serialize_mission_runs(session)
         self.assertEqual(rows[0]["statusLabel"], "성공")
+        self.assertTrue(rows[0]["fromSsapi"])
+        result_ev = [row for row in serialize_ssapi_assist(session)["missions"] if row["phase"] == "result"]
+        self.assertEqual(result_ev[0]["status"], "success")
+        self.assertEqual(result_ev[0]["statusLabel"], "성공")
 
     def test_settle_fills_missing_donors_only(self) -> None:
         session = self._session()
@@ -272,6 +282,10 @@ class SsapiMissionTests(unittest.TestCase):
         self.assertEqual(len(notes), 1)
         self.assertEqual(notes[0]["text"], "밤양갱 신청이요")
         self.assertEqual(notes[0]["name"], "후원자")
+        self.assertTrue(notes[0]["fromSsapi"])
+        assist = serialize_ssapi_assist(session)
+        self.assertEqual(assist["donationCount"], 1)
+        self.assertEqual(assist["donations"][0]["text"], "밤양갱 신청이요")
 
     def test_empty_donation_message_is_ignored(self) -> None:
         session = self._session()
