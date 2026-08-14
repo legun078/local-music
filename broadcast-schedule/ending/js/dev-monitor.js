@@ -736,8 +736,32 @@
       patchChartSvgPaths(svg, freshSvg);
     }
 
+    const stage = chart.querySelector(".ending-dev-chart__stage");
+    const freshStage = fresh.querySelector(".ending-dev-chart__stage");
+    if (stage && freshStage) {
+      stage.className = freshStage.className;
+      stage.dataset.chartCanvasV = freshStage.dataset.chartCanvasV || stage.dataset.chartCanvasV || "";
+      const axisPairs = [
+        [".ending-dev-chart__axis--left", ".ending-dev-chart__axis--left"],
+        [".ending-dev-chart__axis--right", ".ending-dev-chart__axis--right"],
+      ];
+      for (const [sel] of axisPairs) {
+        const axis = stage.querySelector(sel);
+        const freshAxis = freshStage.querySelector(sel);
+        if (axis && freshAxis) axis.innerHTML = freshAxis.innerHTML;
+      }
+    }
+
     wrap.dataset.chartFullMin = freshWrap.dataset.chartFullMin;
     wrap.dataset.chartFullMax = freshWrap.dataset.chartFullMax;
+
+    if (!chartPinnedAt) {
+      const cursor = wrap.querySelector("[data-chart-cursor]");
+      hideChartCursorLine(cursor);
+      wrap.querySelector("[data-chart-marker]")?.setAttribute("hidden", "");
+      wrap.querySelector("[data-chart-marker-viewers]")?.setAttribute("hidden", "");
+      wrap.querySelector("[data-chart-marker-chats]")?.setAttribute("hidden", "");
+    }
 
     restoreChartPlotPan(root, savedPan);
     return rendered.bind || null;
@@ -1074,7 +1098,13 @@
     const root = rootEl || els.dataBody;
     if (!root) return CHART_W;
     const stage = root.querySelector?.(".ending-dev-chart__stage");
-    if (stage?.clientWidth >= CHART_W_MIN) return Math.round(stage.clientWidth);
+    if (stage?.clientWidth >= CHART_W_MIN) {
+      const dual = stage.classList.contains("ending-dev-chart__stage--dual");
+      const axisR = dual ? CHART_AXIS_R_DUAL : CHART_AXIS_R_SINGLE;
+      return Math.max(CHART_W_MIN, Math.round(stage.clientWidth - CHART_AXIS_L - axisR));
+    }
+    const scroller = root.querySelector?.("[data-chart-plot-scroll]");
+    if (scroller?.clientWidth >= CHART_W_MIN) return Math.round(scroller.clientWidth);
     const viewport = root.querySelector?.(".ending-dev-chart__viewport");
     if (viewport?.clientWidth >= CHART_W_MIN) return Math.round(viewport.clientWidth);
     const digest = root.querySelector?.(".ending-dev-digest");
@@ -2154,8 +2184,13 @@
         ? config.formatValue
         : (v) => `${fmtNum(v)}${config.valueSuffix || ""}`;
 
-    function showHit(hit, { persist = true, pointerX = null } = {}) {
-      if (String(wrap.dataset.chartToken) !== String(token) || !hit) return;
+    function showHit(hit, { persist = false, showCursor = false, pointerX = null } = {}) {
+      if (String(wrap.dataset.chartToken) !== String(token)) return;
+      if (!hit) {
+        if (cursor) hideChartCursorLine(cursor);
+        if (marker) marker.hidden = true;
+        return;
+      }
       const links = replayLinksForPoint(config.replay, hit.at);
       setChartTipHtml(
         wrap,
@@ -2165,14 +2200,19 @@
       );
       const cursorX = hit.chartX;
       if (cursor) {
-        showChartCursorLine(cursor, cursorX, pad.t, pad.t + innerH);
+        if (showCursor) showChartCursorLine(cursor, cursorX, pad.t, pad.t + innerH);
+        else hideChartCursorLine(cursor);
       }
       if (marker) {
-        marker.hidden = false;
-        marker.setAttribute("cx", String(hit.chartX));
-        marker.setAttribute("cy", String(yAt(hit.v)));
-        if (config.lineColor) {
-          marker.style.stroke = config.lineColor;
+        if (showCursor) {
+          marker.hidden = false;
+          marker.setAttribute("cx", String(hit.chartX));
+          marker.setAttribute("cy", String(yAt(hit.v)));
+          if (config.lineColor) {
+            marker.style.stroke = config.lineColor;
+          }
+        } else {
+          marker.hidden = true;
         }
       }
       wrap.dataset.hoverAt = hit.at;
@@ -2196,7 +2236,7 @@
 
     function pinHit(hit, { openTab = true, pointerX = null } = {}) {
       if (!hit) return;
-      showHit(hit, { pointerX });
+      showHit(hit, { persist: true, showCursor: true, pointerX });
       applyChartReplay(
         wrap,
         config.replay,
@@ -2221,7 +2261,35 @@
 
     overlay.addEventListener("mousemove", (ev) => {
       const { hit, pointerX } = pointerHit(ev.clientX, ev.clientY);
-      showHit(hit, { pointerX });
+      showHit(hit, { persist: false, showCursor: Boolean(hit), pointerX });
+    });
+    overlay.addEventListener("mouseleave", () => {
+      const pinned = chartPinnedAt ? nearestSeriesPointAtTime(points, chartPinnedAt) : null;
+      if (pinned) {
+        showHit(
+          {
+            at: pinned.at,
+            v: pinned.v,
+            chartX: xAtTime(pinned.at),
+          },
+          { persist: true, showCursor: true }
+        );
+        return;
+      }
+      const last = points[points.length - 1];
+      if (last) {
+        showHit(
+          {
+            at: last.at,
+            v: last.v,
+            chartX: xAtTime(last.at),
+          },
+          { persist: false, showCursor: false }
+        );
+      } else if (cursor) {
+        hideChartCursorLine(cursor);
+        if (marker) marker.hidden = true;
+      }
     });
     overlay.addEventListener("click", (ev) => {
       const { hit, pointerX } = pointerHit(ev.clientX, ev.clientY);
@@ -2240,7 +2308,7 @@
           v: restore.v,
           chartX: xAtTime(restore.at),
         },
-        { persist: Boolean(chartPinnedAt) }
+        { persist: Boolean(chartPinnedAt), showCursor: Boolean(chartPinnedAt) }
       );
     }
   }
@@ -2277,8 +2345,14 @@
       maxChats
     );
 
-    function showSnap(snap, { persist = true, pointerX = null } = {}) {
-      if (String(wrap.dataset.chartToken) !== String(token) || !snap) return;
+    function showSnap(snap, { persist = false, showCursor = false, pointerX = null } = {}) {
+      if (String(wrap.dataset.chartToken) !== String(token)) return;
+      if (!snap) {
+        if (cursor) hideChartCursorLine(cursor);
+        if (markerViewers) markerViewers.hidden = true;
+        if (markerChats) markerChats.hidden = true;
+        return;
+      }
       const snapAt = snap.at;
       const dataX = xAtTime(snapAt);
       const cursorX = dataX;
@@ -2303,10 +2377,11 @@
         }`
       );
       if (cursor) {
-        showChartCursorLine(cursor, cursorX, pad.t, pad.t + innerH);
+        if (showCursor) showChartCursorLine(cursor, cursorX, pad.t, pad.t + innerH);
+        else hideChartCursorLine(cursor);
       }
       if (markerViewers) {
-        if (viewerV != null && Number.isFinite(Number(viewerV))) {
+        if (showCursor && viewerV != null && Number.isFinite(Number(viewerV))) {
           markerViewers.hidden = false;
           markerViewers.setAttribute("cx", String(dataX));
           markerViewers.setAttribute("cy", String(yViewers(viewerV)));
@@ -2315,7 +2390,7 @@
         }
       }
       if (markerChats) {
-        if (chatV != null && Number.isFinite(Number(chatV))) {
+        if (showCursor && chatV != null && Number.isFinite(Number(chatV))) {
           markerChats.hidden = false;
           markerChats.setAttribute("cx", String(dataX));
           markerChats.setAttribute("cy", String(yChats(chatV)));
@@ -2338,7 +2413,7 @@
 
     function pinSnap(snap, { openTab = true, pointerX = null } = {}) {
       if (!snap) return;
-      showSnap(snap, { pointerX });
+      showSnap(snap, { persist: true, showCursor: true, pointerX });
       applyChartReplay(
         wrap,
         config.replay,
@@ -2366,7 +2441,23 @@
 
     overlay.addEventListener("mousemove", (ev) => {
       const { snap, pointerX } = pointerSnap(ev.clientX, ev.clientY);
-      showSnap(snap, { pointerX });
+      showSnap(snap, { persist: false, showCursor: Boolean(snap), pointerX });
+    });
+    overlay.addEventListener("mouseleave", () => {
+      const pinned = chartPinnedAt
+        ? nearestMergedPointAtTime(merged, parseChartDate(chartPinnedAt)?.getTime())
+        : null;
+      if (pinned) {
+        showSnap(pinned, { persist: true, showCursor: true });
+        return;
+      }
+      const last = merged[merged.length - 1];
+      if (last) showSnap(last, { persist: false, showCursor: false });
+      else {
+        if (cursor) hideChartCursorLine(cursor);
+        if (markerViewers) markerViewers.hidden = true;
+        if (markerChats) markerChats.hidden = true;
+      }
     });
     overlay.addEventListener("click", (ev) => {
       const { snap, pointerX } = pointerSnap(ev.clientX, ev.clientY);
@@ -2379,7 +2470,7 @@
     const restore = chartPinnedAt
       ? nearestMergedPointAtTime(merged, parseChartDate(chartPinnedAt)?.getTime())
       : merged[merged.length - 1];
-    if (restore) showSnap(restore, { persist: Boolean(chartPinnedAt) });
+    if (restore) showSnap(restore, { persist: Boolean(chartPinnedAt), showCursor: Boolean(chartPinnedAt) });
   }
 
   function renderMetricChartPanel(points, opts) {
