@@ -1114,6 +1114,19 @@
   line-height: 1.4;
 }
 
+.ending-dev-notes__text--muted {
+  color: var(--dev-muted);
+  font-size: 0.78rem;
+}
+
+.ending-dev-empty__hint {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.74rem;
+  color: var(--dev-muted);
+  font-weight: 500;
+}
+
 .ending-dev-notes--ssapi {
   margin-top: 0;
   padding-top: 0;
