@@ -48,6 +48,7 @@
   const METRICS_CHART_MODE_KEY = "ending_dev_monitor_metrics_chart_mode";
   const CHART_ZOOM_STORAGE_KEY = "ending_dev_chart_zoom";
   const CHART_PAN_STORAGE_KEY = "ending_dev_chart_pan";
+  const CHART_VIEW_SCOPE_KEY = "ending_dev_chart_view_scope";
   const VIEW_KEY = "ending_dev_monitor_view";
   const SCROLL_STATE_KEY = "ending_dev_monitor_scroll";
   const METRICS_CHART_MODES = [
@@ -77,6 +78,7 @@
   let historyBusy = false;
   let scrollRestorePending = null;
   let scrollPersistTimer = null;
+  let chartViewScopeKey = "";
 
   try {
     dataTabId = String(sessionStorage.getItem(DATA_TAB_KEY) || "").trim();
@@ -575,6 +577,52 @@
     const stored = Number(sessionStorage.getItem(CHART_PAN_STORAGE_KEY));
     if (Number.isFinite(stored) && stored >= 0 && stored <= 1) return stored;
     return 0;
+  }
+
+  /** 탭·보기·아카이브·차트 모드·시계열 시작 등 데이터 컨텍스트 식별 */
+  function chartViewScopeFingerprint(collected) {
+    const acc = lastData ? resolveAccount(lastData, activeTab) : null;
+    const c = collected || (acc?.session || {}).collected || {};
+    const ctx = metricsChartContext(c);
+    const range = chartTimeRangeFromPoints(
+      seriesPoints(ctx.metricsSeries?.viewers),
+      seriesPoints(ctx.metricsSeries?.chats)
+    );
+    const archiveId = String(acc?.archiveId || historyArchiveId || "").trim();
+    const stationId = String(acc?.stationId || (lastData ? activeStationId(lastData) : "") || "").trim();
+    const rangeStart = range ? String(range.minMs) : "0";
+    return [activeTab, viewMode, archiveId, stationId, metricsChartMode, rangeStart].join("\u001f");
+  }
+
+  function resetChartViewToFit() {
+    try {
+      sessionStorage.setItem(CHART_ZOOM_STORAGE_KEY, String(CHART_ZOOM_DEFAULT));
+      sessionStorage.setItem(CHART_PAN_STORAGE_KEY, "0");
+    } catch (_) {
+      /* ignore */
+    }
+    chartPinnedAt = "";
+  }
+
+  /** 데이터 컨텍스트가 바뀌면 확대·pan 없이 전체 구간으로 되돌린다. */
+  function syncChartViewScope(collected) {
+    const next = chartViewScopeFingerprint(collected);
+    let prev = chartViewScopeKey;
+    if (!prev) {
+      try {
+        prev = sessionStorage.getItem(CHART_VIEW_SCOPE_KEY) || "";
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    chartViewScopeKey = next;
+    try {
+      sessionStorage.setItem(CHART_VIEW_SCOPE_KEY, next);
+    } catch (_) {
+      /* ignore */
+    }
+    if (prev === next) return;
+    resetChartViewToFit();
   }
 
   function setChartPanLevel(pan, { rerender = false } = {}) {
@@ -2924,6 +2972,7 @@
   }
 
   function renderDataPanel(sections, collected) {
+    syncChartViewScope(collected);
     const cats = buildDataCategories(sections, collected)
       .map((c, i) => ({ ...c, _ord: i }))
       .sort((a, b) => {
