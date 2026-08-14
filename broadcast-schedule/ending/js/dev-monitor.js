@@ -932,17 +932,21 @@
     return best;
   }
 
-  function nearestSeriesPointAtChartXY(points, chartX, chartY, xAt, yAt) {
+  function chartStickyPx(count, xSpan) {
+    const n = Math.max(1, Number(count) || 1);
+    const span = Math.max(0, Number(xSpan) || 0);
+    const pxPer = n <= 1 ? span : span / (n - 1);
+    return Math.max(16, Math.min(28, pxPer * 10));
+  }
+
+  function nearestSeriesPointAtChartX(points, chartX, xAt) {
     const list = Array.isArray(points) ? points : [];
     const n = list.length;
     if (!n) return null;
-    const hasY = Number.isFinite(Number(chartY)) && typeof yAt === "function";
     let bestI = 0;
-    let bestDist = Infinity;
-    for (let i = 0; i < n; i++) {
-      const dx = xAt(i) - chartX;
-      const dy = hasY ? yAt(list[i].v) - chartY : 0;
-      const d = dx * dx + dy * dy;
+    let bestDist = Math.abs(xAt(0) - chartX);
+    for (let i = 1; i < n; i++) {
+      const d = Math.abs(xAt(i) - chartX);
       if (d < bestDist) {
         bestDist = d;
         bestI = i;
@@ -952,22 +956,58 @@
     return { at: p.at, v: p.v, chartX: xAt(bestI), index: bestI };
   }
 
-  function nearestDualSnapAtChartXY(viewerPoints, chatPoints, chartX, chartY, xAtTime, yViewers, yChats) {
-    let best = null;
-    const consider = (points, yFn) => {
-      for (const p of Array.isArray(points) ? points : []) {
-        if (!p || !Number.isFinite(Number(p.v))) continue;
-        const x = Number(xAtTime(p.at));
-        const y = Number(yFn(p.v));
-        if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
-        const dx = x - chartX;
-        const dy = y - chartY;
-        const dist = dx * dx + dy * dy;
-        if (!best || dist < best.dist) best = { at: p.at, dist };
+  function snapSeriesPointAtPointer(points, chartX, chartY, xAt, yAt, stickyPx) {
+    const byX = nearestSeriesPointAtChartX(points, chartX, xAt);
+    if (!byX) return null;
+    if (!Number.isFinite(Number(chartY)) || typeof yAt !== "function") return byX;
+    const sticky = Math.max(16, Number(stickyPx) || 16);
+    const list = Array.isArray(points) ? points : [];
+    let best = byX;
+    let bestY = Math.abs(yAt(byX.v) - chartY);
+    let bestX = Math.abs(byX.chartX - chartX);
+    for (let i = 0; i < list.length; i++) {
+      const x = xAt(i);
+      if (Math.abs(x - chartX) > sticky) continue;
+      const yDist = Math.abs(yAt(list[i].v) - chartY);
+      const xDist = Math.abs(x - chartX);
+      if (yDist + 6 < bestY || (Math.abs(yDist - bestY) <= 6 && xDist < bestX)) {
+        bestY = yDist;
+        bestX = xDist;
+        best = { at: list[i].at, v: list[i].v, chartX: x, index: i };
       }
+    }
+    return best;
+  }
+
+  function snapMergedPointAtPointer(merged, chartX, chartY, xAtTime, yViewers, yChats, stickyPx, hoverMs) {
+    const byTime = nearestMergedPointAtTime(merged, hoverMs);
+    if (!byTime) return null;
+    if (!Number.isFinite(Number(chartY))) return byTime;
+    const sticky = Math.max(16, Number(stickyPx) || 16);
+    const yDistOf = (row) => {
+      let best = Infinity;
+      if (row.viewers != null && Number.isFinite(Number(row.viewers))) {
+        best = Math.min(best, Math.abs(yViewers(row.viewers) - chartY));
+      }
+      if (row.chats != null && Number.isFinite(Number(row.chats))) {
+        best = Math.min(best, Math.abs(yChats(row.chats) - chartY));
+      }
+      return best;
     };
-    consider(viewerPoints, yViewers);
-    consider(chatPoints, yChats);
+    let best = byTime;
+    let bestY = yDistOf(byTime);
+    let bestX = Math.abs(Number(xAtTime(byTime.at)) - chartX);
+    for (const row of Array.isArray(merged) ? merged : []) {
+      const x = Number(xAtTime(row.at));
+      if (!Number.isFinite(x) || Math.abs(x - chartX) > sticky) continue;
+      const yDist = yDistOf(row);
+      const xDist = Math.abs(x - chartX);
+      if (yDist + 6 < bestY || (Math.abs(yDist - bestY) <= 6 && xDist < bestX)) {
+        best = row;
+        bestY = yDist;
+        bestX = xDist;
+      }
+    }
     return best;
   }
 
@@ -1088,7 +1128,8 @@
     const h = Number(config.height) || CHART_H;
     const pad = config.pad || CHART_PAD_SINGLE;
     const maxV = chartScaleMax(Math.max(...points.map((p) => p.v), 0));
-    const { innerH, xAt, yAt } = chartAxisLayout(points.length, pad, w, h, maxV);
+    const { innerH, xAt, yAt, xSpan } = chartAxisLayout(points.length, pad, w, h, maxV);
+    const stickyPx = chartStickyPx(points.length, xSpan);
     const valueFmt =
       typeof config.formatValue === "function"
         ? config.formatValue
@@ -1121,7 +1162,7 @@
 
     function hitAtPointer(clientX, clientY) {
       const pt = chartClientToSvg(svg, clientX, clientY, w, h);
-      return nearestSeriesPointAtChartXY(points, pt.x, pt.y, xAt, yAt);
+      return snapSeriesPointAtPointer(points, pt.x, pt.y, xAt, yAt, stickyPx);
     }
 
     function pinHit(hit, { openTab = true } = {}) {
@@ -1209,6 +1250,10 @@
       maxViewers,
       maxChats
     );
+    const stickyPx = chartStickyPx(
+      merged.length,
+      Math.max(0, w - pad.l - pad.r - CHART_X_INSET * 2)
+    );
 
     function showSnap(snap, { persist = true } = {}) {
       if (String(wrap.dataset.chartToken) !== String(token) || !snap) return;
@@ -1261,22 +1306,17 @@
 
     function snapAtPointer(clientX, clientY) {
       const pt = chartClientToSvg(svg, clientX, clientY, w, h);
-      const hit = nearestDualSnapAtChartXY(
-        viewerPoints,
-        chatPoints,
+      const hoverMs = chartXToTimeMs(pt.x, pad, w, minMs, maxMs);
+      return snapMergedPointAtPointer(
+        merged,
         pt.x,
         pt.y,
         xAtTime,
         yViewers,
-        yChats
+        yChats,
+        stickyPx,
+        hoverMs
       );
-      if (hit?.at) {
-        const want = parseChartDate(hit.at)?.getTime();
-        const snapped = nearestMergedPointAtTime(merged, want);
-        if (snapped) return snapped;
-      }
-      const hoverMs = chartXToTimeMs(pt.x, pad, w, minMs, maxMs);
-      return nearestMergedPointAtTime(merged, hoverMs);
     }
 
     function pinSnap(snap, { openTab = true } = {}) {
