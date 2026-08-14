@@ -607,25 +607,24 @@
 }
 
 .ending-dev-stats > div {
-  padding: 0.75rem 0.8rem;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #f7f9fc, #eef3f9);
-  border: 1px solid color-mix(in srgb, var(--dev-line) 85%, transparent);
+  padding: 0.62rem 0.72rem;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid color-mix(in srgb, var(--dev-line) 88%, transparent);
 }
 
 .ending-dev-stats dt {
   margin: 0;
   font-size: 0.66rem;
   font-weight: 750;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--dev-muted);
 }
 
 .ending-dev-stats dd {
-  margin: 0.3rem 0 0;
+  margin: 0.22rem 0 0;
   font-family: var(--dev-mono);
-  font-size: 1.02rem;
+  font-size: 0.92rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -1406,55 +1405,80 @@
 .ending-dev-chart {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.45rem;
+}
+
+.ending-dev-chart__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 0.75rem;
+  padding: 0.5rem 0.62rem;
+  border-radius: 12px;
+  border: 1px solid var(--dev-line);
+  background: linear-gradient(180deg, #f8fafc, #f3f6fb);
+}
+
+.ending-dev-chart__toolbar-side {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem 0.7rem;
+  margin-left: auto;
 }
 
 .ending-dev-chart__meta {
   margin: 0;
   font-family: var(--dev-mono);
-  font-size: 0.76rem;
+  font-size: 0.74rem;
   font-weight: 650;
   color: var(--dev-muted);
+  white-space: nowrap;
 }
 
 .ending-dev-chart__jumps {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0 0 0.15rem;
+  gap: 0.35rem;
+  margin: 0;
 }
 
 .ending-dev-chart__jump {
   appearance: none;
   display: inline-flex;
-  align-items: baseline;
-  gap: 0.4rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.12rem;
   margin: 0;
-  padding: 0.42rem 0.72rem;
-  border-radius: 999px;
+  padding: 0.34rem 0.58rem;
+  border-radius: 10px;
   border: 1px solid var(--dev-line);
   background: #fff;
   color: var(--dev-ink);
   font: inherit;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(21, 32, 51, 0.04);
+  box-shadow: none;
+  min-width: 0;
 }
 
 .ending-dev-chart__jump:hover,
 .ending-dev-chart__jump:focus-visible {
   border-color: color-mix(in srgb, var(--dev-blue) 45%, var(--dev-line));
-  background: var(--dev-blue-soft);
+  background: #fff;
 }
 
 .ending-dev-chart__jump.is-chat:hover,
 .ending-dev-chart__jump.is-chat:focus-visible {
   border-color: color-mix(in srgb, #c45c26 45%, var(--dev-line));
-  background: rgba(196, 92, 38, 0.1);
+  background: #fff;
 }
 
 .ending-dev-chart__jump-k {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 750;
+  letter-spacing: 0.01em;
   color: var(--dev-muted);
 }
 
@@ -1466,14 +1490,21 @@
   color: #c45c26;
 }
 
+.ending-dev-chart__jump-v {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
 .ending-dev-chart__jump strong {
-  font-size: 0.84rem;
-  font-weight: 750;
+  font-size: 0.82rem;
+  font-weight: 800;
+  font-family: var(--dev-mono);
 }
 
 .ending-dev-chart__jump-t {
   font-family: var(--dev-mono);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--dev-muted);
 }
 
@@ -1513,21 +1544,21 @@
 }
 
 .ending-dev-chart__readout {
-  margin: 0.15rem 0 0.45rem;
+  margin: 0;
 }
 
 .ending-dev-chart__tip {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.2rem 0.75rem;
-  min-height: 2.35rem;
-  padding: 0.42rem 0.65rem;
+  gap: 0.18rem 0.55rem;
+  min-height: 2rem;
+  padding: 0.34rem 0.55rem;
   border-radius: 10px;
-  border: 1px solid var(--dev-line);
-  background: var(--dev-panel-2);
+  border: 1px dashed color-mix(in srgb, var(--dev-line) 88%, transparent);
+  background: rgba(255, 255, 255, 0.72);
   pointer-events: none;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
 }
 
 .ending-dev-chart__tip-idle {
@@ -1645,8 +1676,8 @@
 .ending-dev-chart--dual .ending-dev-chart__legend {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.65rem;
-  margin: 0 0 0.35rem;
+  gap: 0.55rem;
+  margin: 0;
 }
 
 .ending-dev-chart__legend-item {

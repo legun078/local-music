@@ -26,7 +26,7 @@
     history: document.getElementById("acc-history"),
     historyDate: document.getElementById("acc-history-date"),
     historyList: document.getElementById("acc-history-list"),
-    flags: document.getElementById("acc-flags"),
+    flags: null,
     stats: document.getElementById("acc-stats"),
     peak: document.getElementById("acc-peak"),
     peakImg: document.getElementById("acc-peak-img"),
@@ -242,17 +242,6 @@
     }
   }
 
-  function renderFlags(el, live) {
-    if (!el) return;
-    // 수집·SSAPI는 상단 상태 줄에 있으므로, 여기선 켜진 접속만 표시
-    const items = [
-      live?.obsBrowserActive ? pill("OBS", false, "is-present") : "",
-      live?.collectorTabActive ? pill("수집기 탭", false, "is-present") : "",
-    ].filter(Boolean);
-    el.innerHTML = items.join("");
-    el.hidden = items.length === 0;
-  }
-
   function renderSegments(el, segs) {
     if (!el) return;
     const rows = Array.isArray(segs) ? segs.slice(-5).reverse() : [];
@@ -400,6 +389,24 @@
     return { kind: "chat", at: p.at, v: p.v };
   }
 
+  function renderChartToolbar({ jumps, meta, showLegend = false }) {
+    const items = (Array.isArray(jumps) ? jumps : []).filter(Boolean);
+    const peaksHtml = items.length ? renderPeakJumpBar(items) : "";
+    const metaText = String(meta || "").trim();
+    const metaHtml = metaText ? `<p class="ending-dev-chart__meta">${esc(metaText)}</p>` : "";
+    const legendHtml = showLegend
+      ? `<div class="ending-dev-chart__legend" aria-hidden="true">
+        <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--viewers">시청자</span>
+        <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--chat">채팅 화력</span>
+      </div>`
+      : "";
+    if (!peaksHtml && !metaHtml && !legendHtml) return "";
+    return `<div class="ending-dev-chart__toolbar">
+      ${peaksHtml}
+      <div class="ending-dev-chart__toolbar-side">${metaHtml}${legendHtml}</div>
+    </div>`;
+  }
+
   function renderPeakJumpBar(jumps) {
     const items = (Array.isArray(jumps) ? jumps : []).filter(Boolean);
     if (!items.length) return "";
@@ -414,8 +421,7 @@
             j.kind
           )}" data-peak-jump="${esc(j.at)}">
             <span class="ending-dev-chart__jump-k">${esc(label)}</span>
-            <strong>${esc(value)}</strong>
-            <span class="ending-dev-chart__jump-t">${esc(clock)}</span>
+            <span class="ending-dev-chart__jump-v"><strong>${esc(value)}</strong><span class="ending-dev-chart__jump-t">${esc(clock)}</span></span>
           </button>`;
         })
         .join("")}
@@ -1458,8 +1464,7 @@
       }
     }
     return `<div class="ending-dev-chart">
-      ${renderPeakJumpBar(jumps)}
-      ${renderChartMeta(meta)}
+      ${renderChartToolbar({ jumps, meta: typeof o.meta === "function" ? o.meta(points, maxV) : String(o.meta || "") })}
       <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
@@ -1604,12 +1609,7 @@
     }`;
     return {
       html: `<div class="ending-dev-chart ending-dev-chart--dual">
-      ${renderPeakJumpBar([viewerPeak, chatPeak])}
-      ${renderChartMeta(meta)}
-      <div class="ending-dev-chart__legend" aria-hidden="true">
-        <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--viewers">시청자</span>
-        <span class="ending-dev-chart__legend-item ending-dev-chart__legend-item--chat">채팅 화력</span>
-      </div>
+      ${renderChartToolbar({ jumps: [viewerPeak, chatPeak], meta, showLegend: true })}
       <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
         <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
@@ -2452,7 +2452,6 @@
     setViewModeUi();
 
     setPanelStatus(acc);
-    renderFlags(els.flags, sess);
     renderStats(els.stats, [
       ["채팅", `${fmtNum(info.chatters || collected.counts?.chatters || sess.chatterCount)}명 · ${fmtNum(info.chatCount || collected.counts?.chatCount || sess.chatCount)}회`],
       ["별풍", fmtNum(info.balloonTotal || collected.counts?.balloonTotal || sess.balloonTotal)],
