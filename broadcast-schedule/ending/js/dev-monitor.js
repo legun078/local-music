@@ -324,6 +324,42 @@
     });
   }
 
+  function parseMonthsValue(raw) {
+    const m = String(raw || "").trim().match(/(\d+)/);
+    return m ? Number(m[1]) || 0 : 0;
+  }
+
+  function parseFanclubSortValue(raw) {
+    const s = String(raw || "").trim().replace(/,/g, "");
+    const amt = s.match(/^(\d+)개$/);
+    if (amt) return { amount: Number(amt[1]) || 0, fanNo: 0 };
+    const fan = s.match(/^#(\d+)$/);
+    if (fan) return { amount: 0, fanNo: Number(fan[1]) || 0 };
+    return { amount: 0, fanNo: 0 };
+  }
+
+  function sortDevCategoryItems(id, items) {
+    const list = Array.isArray(items) ? items.slice() : [];
+    if (id === "subscribe_renew") {
+      list.sort((a, b) => {
+        const diff = parseMonthsValue(b.value) - parseMonthsValue(a.value);
+        if (diff) return diff;
+        return String(a.name || "").localeCompare(String(b.name || ""), "ko");
+      });
+    } else if (id === "fanclub") {
+      list.sort((a, b) => {
+        const av = parseFanclubSortValue(a.value);
+        const bv = parseFanclubSortValue(b.value);
+        if (bv.amount !== av.amount) return bv.amount - av.amount;
+        const af = av.fanNo || 999999;
+        const bf = bv.fanNo || 999999;
+        if (af !== bf) return af - bf;
+        return String(a.name || "").localeCompare(String(b.name || ""), "ko");
+      });
+    }
+    return list.map((row, i) => ({ ...row, rank: i + 1 }));
+  }
+
   function seriesPoints(series) {
     if (!Array.isArray(series)) return [];
     return series
@@ -2733,7 +2769,7 @@
       if (!sec || typeof sec !== "object") continue;
       const id = String(sec.id || "").trim();
       if (!id || id === "thanks") continue;
-      const items = normalizeItems(sec.items || []);
+      const items = sortDevCategoryItems(id, normalizeItems(sec.items || []));
       byId.set(id, {
         id,
         title: dataTabTitle(id, sec.title),
@@ -2756,7 +2792,7 @@
       ["topfan", dataTabTitle("topfan"), c.topFans, "value", null],
     ];
     for (const [id, title, rows, key, totalHint] of preferred) {
-      const items = normalizeItems(rows, key);
+      const items = sortDevCategoryItems(id, normalizeItems(rows, key));
       const prev = byId.get(id);
       if (!items.length) {
         if (prev && !prev.count && totalHint) prev.count = Number(totalHint) || 0;

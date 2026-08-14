@@ -51,6 +51,9 @@ from credits_store import (
     serialize_mission_runs,
     serialize_ssapi_assist,
     session_metrics_end_at,
+    sort_fanclub_joins,
+    sort_subscriber_renewals,
+    fanclub_row_value,
 )
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -1189,7 +1192,18 @@ def _session_collected_preview(session: dict | None, *, limit: int = 10) -> dict
                     m = int(it.get("months") or 0)
                 except (TypeError, ValueError):
                     m = 0
+                if m <= 0:
+                    try:
+                        m = int(it.get("accMonths") or 0)
+                    except (TypeError, ValueError):
+                        m = 0
                 row["value"] = f"{m}개월" if m > 0 else (str(it.get("value") or "").strip() or "—")
+            elif it.get("joinAmount") is not None:
+                try:
+                    amt = int(it.get("joinAmount") or 0)
+                except (TypeError, ValueError):
+                    amt = 0
+                row["value"] = f"{amt:,}개" if amt > 0 else fanclub_row_value(it)
             elif it.get("value") is not None and str(it.get("value") or "").strip():
                 row["value"] = it.get("value")
             elif it.get("type"):
@@ -1252,9 +1266,17 @@ def _session_collected_preview(session: dict | None, *, limit: int = 10) -> dict
         "topWatchers": watch_out,
         "topDonations": don_out,
         "subscribers": _list_named(session.get("subscribers")),
-        "subscriberRenewals": _list_named(session.get("subscriberRenewals")),
+        "subscriberRenewals": _list_named(
+            sort_subscriber_renewals(session.get("subscriberRenewals") or [])
+        ),
         "subscriptionGifts": _gift_rows(session.get("subscriptionGifts")),
-        "fanclubJoins": _list_named(session.get("fanclubJoins")),
+        "fanclubJoins": _list_named(
+            [
+                r
+                for r in sort_fanclub_joins(session.get("fanclubJoins") or [])
+                if isinstance(r, dict) and not r.get("missed")
+            ]
+        ),
         "topFans": _list_named(session.get("topFans")),
         "topEmoticons": emo_out,
         "counts": {

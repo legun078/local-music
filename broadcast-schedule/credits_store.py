@@ -114,6 +114,75 @@ def dedupe_subscription_lists(session: dict[str, Any]) -> bool:
     return True
 
 
+def _renewal_months(row: dict[str, Any]) -> int:
+    if not isinstance(row, dict):
+        return 0
+    try:
+        months = int(row.get("months") or 0)
+    except (TypeError, ValueError):
+        months = 0
+    if months > 0:
+        return months
+    try:
+        return int(row.get("accMonths") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def sort_subscriber_renewals(rows: list[Any]) -> list[dict[str, Any]]:
+    """연속 구독: 구독 개월 수가 긴 순."""
+    src = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    return sorted(
+        src,
+        key=lambda r: (
+            -_renewal_months(r),
+            str(r.get("name") or "").strip().casefold(),
+        ),
+    )
+
+
+def _fanclub_join_amount(row: dict[str, Any]) -> int:
+    if not isinstance(row, dict):
+        return 0
+    try:
+        return max(0, int(row.get("joinAmount") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _fanclub_number(row: dict[str, Any]) -> int:
+    if not isinstance(row, dict):
+        return 0
+    try:
+        return max(0, int(row.get("fanNumber") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def sort_fanclub_joins(rows: list[Any]) -> list[dict[str, Any]]:
+    """팬클럽 가입: 가입 액수(별풍)가 큰 순, 동률이면 팬 번호가 낮은 순."""
+    src = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+    return sorted(
+        src,
+        key=lambda r: (
+            -_fanclub_join_amount(r),
+            _fanclub_number(r) if _fanclub_number(r) > 0 else 999_999,
+            str(r.get("name") or "").strip().casefold(),
+        ),
+    )
+
+
+def fanclub_row_value(row: dict[str, Any]) -> str:
+    amt = _fanclub_join_amount(row)
+    if amt > 0:
+        return f"{amt:,}개"
+    fan_n = _fanclub_number(row)
+    if fan_n > 0:
+        return f"#{fan_n}"
+    val = str(row.get("value") or "").strip()
+    return val or "—"
+
+
 def atomic_write_json(path: Path, data: dict) -> None:
     """고유 tmp + 파일 flock. 고정 .tmp 동시 rename/깨짐 방지 (프로세스 간 포함)."""
     path = Path(path)
@@ -5543,7 +5612,9 @@ class CreditsStore:
             }
         )
 
-        renew_raw = session.get("subscriberRenewals") if isinstance(session.get("subscriberRenewals"), list) else []
+        renew_raw = sort_subscriber_renewals(
+            session.get("subscriberRenewals") if isinstance(session.get("subscriberRenewals"), list) else []
+        )
         renew_items = []
         renew_seen = set()
         for row in renew_raw:
@@ -5553,16 +5624,7 @@ class CreditsStore:
             if not name or name in renew_seen:
                 continue
             renew_seen.add(name)
-            # 채팅 알림과 동일: subscriptionMonths(months). 누적(accMonths)은 fallback.
-            try:
-                months = int(row.get("months") or 0)
-            except (TypeError, ValueError):
-                months = 0
-            if months <= 0:
-                try:
-                    months = int(row.get("accMonths") or 0)
-                except (TypeError, ValueError):
-                    months = 0
+            months = _renewal_months(row)
             value = f"{months}개월" if months > 0 else ""
             item = {"name": name}
             if value:
@@ -5608,10 +5670,21 @@ class CreditsStore:
             }
         )
 
-        fanclub_raw = (
+        fanclub_raw = sort_fanclub_joins(
             session.get("fanclubJoins") if isinstance(session.get("fanclubJoins"), list) else []
         )
-        fanclub_items = _name_items(fanclub_raw)
+        fanclub_items = []
+        fanclub_seen = set()
+        for row in fanclub_raw:
+            if not isinstance(row, dict) or row.get("missed"):
+                continue
+            name = str(row.get("name") or "").strip()
+            if not name or name in fanclub_seen:
+                continue
+            fanclub_seen.add(name)
+            fanclub_items.append({"name": name, "value": fanclub_row_value(row)})
+            if len(fanclub_items) >= 40:
+                break
         fanclub_count = int(session.get("fanclubCount") or len(fanclub_raw) or 0)
         sections.append(
             {
@@ -6212,7 +6285,7 @@ class CreditsStore:
                         ts=ts or utc_now_iso(),
                     )
 
-            def note_fanclub(uid: str, uname: str, fan_number: int, ts: str) -> None:
+            def note_fanclub(uid: str, uname: str, fan_number: int, ts: str, *, join_amount: int = 0) -> None:
                 if not uid or fan_number <= 0:
                     return
                 excluded = session.get("fanclubExcludedUserIds")
@@ -6232,9 +6305,19 @@ class CreditsStore:
                         taken.add(existing_n)
                 if fan_number in taken:
                     return
-                fanclub_joins.append(
-                    {"userId": uid, "name": uname, "fanNumber": fan_number, "at": ts}
-                )
+                entry: dict[str, Any] = {
+                    "userId": uid,
+                    "name": uname,
+                    "fanNumber": fan_number,
+                    "at": ts,
+                }
+                try:
+                    amt = int(join_amount or 0)
+                except (TypeError, ValueError):
+                    amt = 0
+                if amt > 0:
+                    entry["joinAmount"] = amt
+                fanclub_joins.append(entry)
                 taken.add(fan_number)
                 nums = sorted(taken)
                 if len(nums) >= 2:
@@ -6251,9 +6334,7 @@ class CreditsStore:
                                     "missed": True,
                                 }
                             )
-                fanclub_joins.sort(
-                    key=lambda r: int(r.get("fanNumber") or 0) if isinstance(r, dict) else 0
-                )
+                fanclub_joins[:] = sort_fanclub_joins(fanclub_joins)
                 session["fanclubJoins"] = fanclub_joins
                 session["fanclubCount"] = len(fanclub_joins)
 
@@ -6539,7 +6620,7 @@ class CreditsStore:
                         fan_number = int(msg.get("fanNumber") or 0)
                     except (TypeError, ValueError):
                         fan_number = 0
-                    note_fanclub(user_id, name, fan_number, ts)
+                    note_fanclub(user_id, name, fan_number, ts, join_amount=count)
                     if msg.get("becomesTopFan"):
                         note_topfan(user_id, name, ts)
 
@@ -6751,8 +6832,10 @@ class CreditsStore:
             session["emoticons"] = emoticons
             session["emoticonUsage"] = emoticon_usage
             session["subscribers"] = subscribers
+            renewals[:] = sort_subscriber_renewals(renewals)
             session["subscriberRenewals"] = renewals
             session["subscriptionGifts"] = sub_gifts
+            fanclub_joins[:] = sort_fanclub_joins(fanclub_joins)
             session["fanclubJoins"] = fanclub_joins
             session["topFans"] = top_fans
             session["identityFlags"] = flags
