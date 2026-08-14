@@ -501,7 +501,7 @@
     return { innerW, innerH, xAtTime, yViewers, yChats };
   }
 
-  /** 분 단위 실측값은 호버/마커에서만 쓰고, 선은 부드럽게 잇는다. */
+  /** 실측 점을 지나고, 뾰족한 피크에서 아래로 빠지지 않게 잇는다. */
   function pathSmoothFromXY(pts) {
     const list = Array.isArray(pts) ? pts : [];
     if (!list.length) return "";
@@ -510,20 +510,45 @@
     if (list.length === 2) {
       return `M${fmt(list[0].x)},${fmt(list[0].y)} L${fmt(list[1].x)},${fmt(list[1].y)}`;
     }
-    // Catmull-Rom → cubic Bézier (선만 부드럽게, 꼭짓점은 실측 좌표 유지)
-    let d = `M${fmt(list[0].x)},${fmt(list[0].y)}`;
-    for (let i = 0; i < list.length - 1; i++) {
-      const p0 = list[Math.max(0, i - 1)];
-      const p1 = list[i];
-      const p2 = list[i + 1];
-      const p3 = list[Math.min(list.length - 1, i + 2)];
-      const cp1x = p1.x + (p2.x - p0.x) / 6;
-      const cp1y = p1.y + (p2.y - p0.y) / 6;
-      const cp2x = p2.x - (p3.x - p1.x) / 6;
-      const cp2y = p2.y - (p3.y - p1.y) / 6;
-      d += ` C${fmt(cp1x)},${fmt(cp1y)} ${fmt(cp2x)},${fmt(cp2y)} ${fmt(p2.x)},${fmt(p2.y)}`;
+    const n = list.length;
+    const dx = [];
+    const slope = [];
+    for (let i = 0; i < n - 1; i++) {
+      const w = list[i + 1].x - list[i].x;
+      dx[i] = w;
+      slope[i] = w ? (list[i + 1].y - list[i].y) / w : 0;
     }
-    return d;
+    const d = new Array(n);
+    d[0] = slope[0];
+    d[n - 1] = slope[n - 2];
+    for (let i = 1; i < n - 1; i++) {
+      d[i] = slope[i - 1] * slope[i] <= 0 ? 0 : (slope[i - 1] + slope[i]) / 2;
+    }
+    for (let i = 0; i < n - 1; i++) {
+      if (Math.abs(slope[i]) < 1e-12) {
+        d[i] = 0;
+        d[i + 1] = 0;
+        continue;
+      }
+      const a = d[i] / slope[i];
+      const b = d[i + 1] / slope[i];
+      const s = a * a + b * b;
+      if (s > 9) {
+        const t = 3 / Math.sqrt(s);
+        d[i] = t * a * slope[i];
+        d[i + 1] = t * b * slope[i];
+      }
+    }
+    let path = `M${fmt(list[0].x)},${fmt(list[0].y)}`;
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = list[i];
+      const p1 = list[i + 1];
+      const seg = dx[i] / 3;
+      path += ` C${fmt(p0.x + seg)},${fmt(p0.y + d[i] * seg)} ${fmt(p1.x - seg)},${fmt(
+        p1.y - d[i + 1] * seg
+      )} ${fmt(p1.x)},${fmt(p1.y)}`;
+    }
+    return path;
   }
 
   function pathForSeriesPointsSmooth(points, xAt, yAt) {
@@ -1156,11 +1181,7 @@
           links ? `<span class="ending-dev-chart__tip-sub">+ ${esc(links.offsetLabel)}</span>` : ""
         }`
       );
-      const minX = pad.l + CHART_X_INSET;
-      const maxX = pad.l + CHART_X_INSET + xSpan;
-      const cursorX = Number.isFinite(Number(pointerX))
-        ? Math.max(minX, Math.min(maxX, Number(pointerX)))
-        : hit.chartX;
+      const cursorX = hit.chartX;
       if (cursor) {
         showChartCursorLine(cursor, cursorX, pad.t, pad.t + innerH);
       }
@@ -1280,11 +1301,7 @@
       if (String(wrap.dataset.chartToken) !== String(token) || !snap) return;
       const snapAt = snap.at;
       const dataX = xAtTime(snapAt);
-      const minX = pad.l + CHART_X_INSET;
-      const maxX = w - pad.r - CHART_X_INSET;
-      const cursorX = Number.isFinite(Number(pointerX))
-        ? Math.max(minX, Math.min(maxX, Number(pointerX)))
-        : dataX;
+      const cursorX = dataX;
       const viewerV = snap.viewers;
       const chatV = snap.chats;
       const links = replayLinksForPoint(config.replay, snapAt);
