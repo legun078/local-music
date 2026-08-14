@@ -529,6 +529,7 @@
   const CHART_AXIS_R_SINGLE = 8;
   const CHART_AXIS_R_DUAL = 58;
   const CHART_PLOT_PAD = { t: 18, r: 12, b: 30, l: 12 };
+  const CHART_SCROLL_CANVAS_V = 3;
 
   function chartZoomLevel() {
     const stored = Number(sessionStorage.getItem(CHART_ZOOM_STORAGE_KEY));
@@ -682,7 +683,7 @@
     const wrap = chart.querySelector("[data-chart-wrap]");
     if (!wrap) return null;
     const dual = mode === "both";
-    const { plotW } = chartRenderPlotMetrics(dual);
+    const { plotW } = chartRenderPlotMetrics(dual, root);
     if (String(wrap.dataset.chartWidth || "") !== String(plotW)) return null;
 
     const ctx = metricsChartContext(collected);
@@ -834,9 +835,7 @@
     }
     if (rerender && lastData) {
       refreshMetricsChartView();
-      return;
     }
-    syncChartPlotScroll(els.dataBody);
   }
 
   /** zoom·pan에 맞춰 X축에 그릴 시간 구간(전체 타임라인 대비). */
@@ -962,21 +961,21 @@
     const axisR = dual ? CHART_AXIS_R_DUAL : CHART_AXIS_R_SINGLE;
     const wrapAttrs = String(o.wrapAttrs || "");
     const aria = esc(o.ariaLabel || "추이");
-    return `<div class="ending-dev-chart__stage"${dual ? "" : ' data-chart-stage-single="1"'}>
+    return `<div class="ending-dev-chart__stage${dual ? " ending-dev-chart__stage--dual" : ""}" data-chart-canvas-v="${CHART_SCROLL_CANVAS_V}">
+      <div class="ending-dev-chart__axis ending-dev-chart__axis--left" aria-hidden="true">${o.axisLeft || ""}</div>
       <div class="ending-dev-chart__plot-scroll" data-chart-plot-scroll tabindex="0" aria-label="그래프 시간 이동">
         <div class="ending-dev-chart__wrap" data-chart-wrap ${wrapAttrs}
-          style="width:${plotW}px"
+          style="width:${plotW}px;min-width:${plotW}px"
           data-chart-width="${plotW}" data-chart-height="${h}"
           data-chart-plot-base="${Number(o.plotBase) || 0}"
           data-chart-full-min="${o.fullMinMs}" data-chart-full-max="${o.fullMaxMs}"
           data-chart-pad="${esc(JSON.stringify(plotPad))}">
-          <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${plotW} ${h}" width="${plotW}" height="${h}" preserveAspectRatio="none" role="img" aria-label="${aria}">
+          <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${plotW} ${h}" width="${plotW}" height="${h}" style="width:${plotW}px;min-width:${plotW}px;height:${h}px" role="img" aria-label="${aria}">
             ${o.plotSvg || ""}
           </svg>
-          <div class="ending-dev-chart__overlay" data-chart-overlay aria-hidden="true" style="width:${plotW}px;height:${h}px"></div>
+          <div class="ending-dev-chart__overlay" data-chart-overlay aria-hidden="true" style="width:${plotW}px;min-width:${plotW}px;height:${h}px"></div>
         </div>
       </div>
-      <div class="ending-dev-chart__axis ending-dev-chart__axis--left" aria-hidden="true">${o.axisLeft || ""}</div>
       ${dual ? `<div class="ending-dev-chart__axis ending-dev-chart__axis--right" aria-hidden="true">${o.axisRight || ""}</div>` : `<div class="ending-dev-chart__axis ending-dev-chart__axis--right ending-dev-chart__axis--gutter" aria-hidden="true"></div>`}
     </div>`;
   }
@@ -1038,10 +1037,8 @@
     return Number(zoom) <= CHART_ZOOM_MIN + 0.001;
   }
 
-  function chartRenderPlotMetrics(dual = true) {
-    const axisR = dual ? CHART_AXIS_R_DUAL : CHART_AXIS_R_SINGLE;
-    const plotBase = Math.max(180, chartLogicalWidth() - CHART_AXIS_L - axisR);
-    const plotW = chartPlotContentWidth(plotBase);
+  function chartRenderPlotMetrics(dual = true, rootEl) {
+    const { plotBase, plotW, axisR } = chartStageMetrics(rootEl, dual);
     return { plotBase, plotW, axisR, pad: CHART_PLOT_PAD };
   }
 
@@ -2362,7 +2359,7 @@
       return `<p class="ending-dev-empty ending-dev-data-empty">${esc(emptyMsg)}</p>`;
     }
     const h = CHART_H;
-    const { plotBase, plotW, pad } = chartRenderPlotMetrics(false);
+    const { plotBase, plotW, pad } = chartRenderPlotMetrics(false, els.dataBody);
     const timeRange = chartTimeRangeFromPoints(points);
     if (!timeRange) {
       return `<p class="ending-dev-empty ending-dev-data-empty">${esc(emptyMsg)}</p>`;
@@ -2484,7 +2481,7 @@
       };
     }
     const h = CHART_H;
-    const { plotBase, plotW, pad } = chartRenderPlotMetrics(true);
+    const { plotBase, plotW, pad } = chartRenderPlotMetrics(true, els.dataBody);
     const timeRange = chartTimeRangeFromPoints(viewers, chats);
     if (!timeRange) {
       return {
