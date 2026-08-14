@@ -1911,7 +1911,7 @@ html.ending-oauth-busy body::before {
 }
 
 .ending-dev-chart__peak-badge {
-  fill: rgba(255, 255, 255, 0.94);
+  fill: rgba(255, 255, 255, 0.9);
   stroke: rgba(47, 95, 154, 0.22);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
@@ -1948,11 +1948,11 @@ html.ending-oauth-busy body::before {
 }
 
 .ending-dev-chart__peak-combo-bg {
-  fill: rgba(255, 255, 255, 0.96);
+  fill: rgba(255, 255, 255, 0.92);
   stroke: rgba(47, 95, 154, 0.2);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 1px 2px rgba(15, 35, 70, 0.12));
+  filter: drop-shadow(0 1px 2px rgba(15, 35, 70, 0.1));
 }
 
 .ending-dev-chart__peak-combo-lead {
