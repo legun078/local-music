@@ -1890,7 +1890,7 @@
   }
 
   function renderChartModeToggles(mode) {
-    return `<div class="ending-dev-chart-mode" role="group" aria-label="그래프 보기">
+    return `<div class="ending-dev-chart-mode" role="group" aria-labelledby="dev-chart-mode-label">
       ${METRICS_CHART_MODES.map((opt) => {
         const on = mode === opt.value;
         return `<button type="button" class="ending-dev-chart-mode__btn${on ? " is-on" : ""}" data-chart-mode="${esc(
@@ -1901,7 +1901,7 @@
   }
 
   function renderLimitToggles(total) {
-    return `<div class="ending-dev-limit" role="group" aria-label="표시 개수">
+    return `<div class="ending-dev-limit" role="group" aria-labelledby="dev-limit-label">
       ${DATA_LIMITS.map((opt) => {
         const on = dataLimit === opt.value;
         const label = opt.value === 0 ? "전체" : opt.label;
@@ -2073,8 +2073,14 @@
             )}</p>
           </div>
           <div class="ending-dev-overview-panel__tools">
-            ${renderChartModeToggles(metricsChartMode)}
-            ${renderLimitToggles(totalItems)}
+            <div class="ending-dev-tool-group ending-dev-tool-group--chart">
+              <span class="ending-dev-tool-group__label" id="dev-chart-mode-label">그래프</span>
+              ${renderChartModeToggles(metricsChartMode)}
+            </div>
+            <div class="ending-dev-tool-group ending-dev-tool-group--limit">
+              <span class="ending-dev-tool-group__label" id="dev-limit-label">목록</span>
+              ${renderLimitToggles(totalItems)}
+            </div>
           </div>
         </div>
         ${digest.html}
