@@ -1666,6 +1666,49 @@ html.ending-oauth-busy body::before {
   text-align: right;
 }
 
+.ending-dev-chart__stage {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 176px;
+  overflow: hidden;
+  overscroll-behavior-x: contain;
+}
+
+.ending-dev-chart__axis {
+  flex: 0 0 auto;
+  height: 176px;
+  overflow: hidden;
+}
+
+.ending-dev-chart__axis--left {
+  width: 48px;
+}
+
+.ending-dev-chart__axis--right {
+  width: 58px;
+}
+
+.ending-dev-chart__axis--gutter {
+  width: 8px;
+}
+
+.ending-dev-chart__axis-svg {
+  display: block;
+  width: 100%;
+  height: 176px;
+}
+
+.ending-dev-chart__plot-scroll {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 176px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .ending-dev-chart__viewport {
   width: 100%;
   height: 176px;
@@ -1675,29 +1718,13 @@ html.ending-oauth-busy body::before {
 
 .ending-dev-chart__wrap {
   position: relative;
-  width: 100%;
   height: 176px;
   overflow: visible;
   padding-right: 0;
-  will-change: transform;
 }
 
 .ending-dev-chart__pan-scroll {
-  width: 100%;
-  height: 0.72rem;
-  margin-top: 0.28rem;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  -webkit-overflow-scrolling: touch;
-}
-
-.ending-dev-chart__pan-scroll[hidden] {
   display: none;
-}
-
-.ending-dev-chart__pan-spacer {
-  height: 1px;
 }
 
 .ending-dev-chart--dual .ending-dev-chart__wrap {
@@ -1705,9 +1732,9 @@ html.ending-oauth-busy body::before {
 }
 
 .ending-dev-chart__svg {
+  display: block;
   width: 100%;
   height: 176px;
-  display: block;
   overflow: visible;
   pointer-events: none;
 }

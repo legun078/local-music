@@ -520,6 +520,10 @@
   const CHART_ZOOM_DEFAULT = 1;
   const CHART_PAD_SINGLE = { t: 18, r: 40, b: 30, l: 48 };
   const CHART_PAD_DUAL = { t: 18, r: 58, b: 30, l: 48 };
+  const CHART_AXIS_L = 48;
+  const CHART_AXIS_R_SINGLE = 8;
+  const CHART_AXIS_R_DUAL = 58;
+  const CHART_PLOT_PAD = { t: 18, r: 12, b: 30, l: 12 };
 
   function chartZoomLevel() {
     const stored = Number(sessionStorage.getItem(CHART_ZOOM_STORAGE_KEY));
@@ -573,15 +577,18 @@
     return 0;
   }
 
-  function setChartPanLevel(pan, { rerender = true } = {}) {
+  function setChartPanLevel(pan, { rerender = false } = {}) {
     const p = Math.max(0, Math.min(1, Number(pan) || 0));
     try {
       sessionStorage.setItem(CHART_PAN_STORAGE_KEY, String(p));
     } catch (_) {
       /* ignore */
     }
-    if (!rerender || !lastData) return;
-    refreshMetricsChartView();
+    if (rerender && lastData) {
+      refreshMetricsChartView();
+      return;
+    }
+    syncChartPlotScroll(els.dataBody);
   }
 
   /** zoom·pan에 맞춰 X축에 그릴 시간 구간(전체 타임라인 대비). */
@@ -610,78 +617,121 @@
     return (start - fullMinMs) / win.maxPanMs;
   }
 
-  function renderChartPanScroll() {
-    if (chartIsFitZoom()) return "";
-    const zoom = chartZoomLevel();
-    return `<div class="ending-dev-chart__pan-scroll" data-chart-pan-scroll aria-label="그래프 시간 이동">
-      <div class="ending-dev-chart__pan-spacer" style="width:${zoom * 100}%"></div>
-    </div>`;
+  function chartPlotContentWidth(plotBase, zoom = chartZoomLevel()) {
+    const base = Math.max(180, Math.round(Number(plotBase) || CHART_W));
+    const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
+    if (z <= CHART_ZOOM_MIN + 0.001) return base;
+    return Math.round(base * z);
   }
 
-  function syncChartPanScroll(root) {
+  function chartStageMetrics(rootEl, dual = true) {
+    const root = rootEl || els.dataBody;
+    const axisR = dual ? CHART_AXIS_R_DUAL : CHART_AXIS_R_SINGLE;
+    const scroller = root?.querySelector?.("[data-chart-plot-scroll]");
+    let plotBase = scroller?.clientWidth >= 180 ? scroller.clientWidth : 0;
+    if (!plotBase) {
+      const total = chartLayoutWidth(root);
+      plotBase = Math.max(180, total - CHART_AXIS_L - axisR);
+    }
+    const plotW = chartPlotContentWidth(plotBase);
+    return { plotBase, plotW, axisR };
+  }
+
+  function syncChartPlotScroll(root) {
     if (!root) return;
-    root.querySelectorAll("[data-chart-pan-scroll]").forEach((scroller) => {
+    root.querySelectorAll("[data-chart-plot-scroll]").forEach((scroller) => {
       if (chartIsFitZoom()) {
-        scroller.hidden = true;
         scroller.scrollLeft = 0;
-        clearChartPanSlide(scroller.closest(".ending-dev-chart"));
         return;
       }
-      scroller.hidden = false;
-      const zoom = chartZoomLevel();
-      const spacer = scroller.querySelector(".ending-dev-chart__pan-spacer");
-      if (spacer) spacer.style.width = `${zoom * 100}%`;
       const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
       scroller.scrollLeft = Math.round(chartPanLevel() * max);
-      clearChartPanSlide(scroller.closest(".ending-dev-chart"));
     });
-  }
-
-  function chartPanScrollerMetrics(scroller) {
-    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-    return {
-      max,
-      committedLeft: Math.round(chartPanLevel() * max),
-    };
-  }
-
-  function clearChartPanSlide(scope) {
-    if (!scope) return;
-    const wraps = scope.matches?.("[data-chart-wrap]")
-      ? [scope]
-      : [...(scope.querySelectorAll?.("[data-chart-wrap]") || [])];
-    wraps.forEach((wrap) => {
-      wrap.style.transition = "";
-      wrap.style.transform = "";
-    });
-  }
-
-  function updateChartPanSlide(scroller) {
-    const chart = scroller?.closest?.(".ending-dev-chart");
-    const wrap = chart?.querySelector?.("[data-chart-wrap]");
-    if (!wrap) return;
-    const { committedLeft } = chartPanScrollerMetrics(scroller);
-    const slidePx = scroller.scrollLeft - committedLeft;
-    if (Math.abs(slidePx) < 0.5) {
-      wrap.style.transition = "";
-      wrap.style.transform = "";
-      return;
-    }
-    wrap.style.transition = "none";
-    wrap.style.transform = `translate3d(${-slidePx}px, 0, 0)`;
-  }
-
-  function commitChartPanFromScroller(scroller) {
-    if (!scroller) return;
-    const { max } = chartPanScrollerMetrics(scroller);
-    const pan = max > 0 ? scroller.scrollLeft / max : 0;
-    const cur = chartPanLevel();
-    clearChartPanSlide(scroller.closest(".ending-dev-chart"));
-    if (Math.abs(cur - pan) < 0.002) return;
-    setChartPanLevel(pan);
   }
 
   let chartPanScrollTimer = null;
+
+  function scheduleChartPanFromPlotScroll(scroller) {
+    if (!scroller) return;
+    clearTimeout(chartPanScrollTimer);
+    chartPanScrollTimer = setTimeout(() => {
+      const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+      const pan = max > 0 ? scroller.scrollLeft / max : 0;
+      const cur = chartPanLevel();
+      if (Math.abs(cur - pan) < 0.002) return;
+      try {
+        sessionStorage.setItem(CHART_PAN_STORAGE_KEY, String(pan));
+      } catch (_) {
+        /* ignore */
+      }
+    }, 80);
+  }
+
+  function scheduleChartPanFromWheel(scroller, deltaPx) {
+    if (!scroller || chartIsFitZoom()) return;
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    if (max <= 0) return;
+    scroller.scrollLeft = Math.max(0, Math.min(max, scroller.scrollLeft + deltaPx));
+    scheduleChartPanFromPlotScroll(scroller);
+  }
+
+  function onChartPanWheel(ev) {
+    if (chartIsFitZoom()) return;
+    const chart = ev.target?.closest?.(".ending-dev-chart");
+    const scroller = chart?.querySelector?.("[data-chart-plot-scroll]");
+    if (!scroller) return;
+    const dx = chartPanWheelDelta(ev);
+    if (Math.abs(dx) < 0.5) return;
+    ev.preventDefault();
+    scheduleChartPanFromWheel(scroller, dx);
+  }
+
+  function renderChartYAxisLeft(yTicks, yAt, h, axisW = CHART_AXIS_L) {
+    return `<svg class="ending-dev-chart__axis-svg" viewBox="0 0 ${axisW} ${h}" width="${axisW}" height="${h}" aria-hidden="true">${yTicks
+      .map((v) => {
+        const y = yAt(v).toFixed(1);
+        return `<line class="ending-dev-chart__grid ending-dev-chart__grid--axis" x1="${axisW - 5}" y1="${y}" x2="${axisW - 1}" y2="${y}" />
+          <text class="ending-dev-chart__ylabel" x="${axisW - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${esc(fmtNum(v))}</text>`;
+      })
+      .join("")}</svg>`;
+  }
+
+  function renderChartYAxisRight(yTicks, yAt, h, axisW = CHART_AXIS_R_DUAL) {
+    return `<svg class="ending-dev-chart__axis-svg" viewBox="0 0 ${axisW} ${h}" width="${axisW}" height="${h}" aria-hidden="true">${yTicks
+      .map((v) => {
+        const y = yAt(v).toFixed(1);
+        return `<text class="ending-dev-chart__ylabel ending-dev-chart__ylabel--right" x="8" y="${y}" text-anchor="start" dominant-baseline="middle">${esc(fmtNum(v))}</text>`;
+      })
+      .join("")}</svg>`;
+  }
+
+  function renderChartPlotStage(opts) {
+    const o = opts || {};
+    const dual = Boolean(o.dual);
+    const h = Number(o.h) || CHART_H;
+    const plotW = Number(o.plotW) || CHART_W;
+    const plotPad = o.plotPad || CHART_PLOT_PAD;
+    const axisR = dual ? CHART_AXIS_R_DUAL : CHART_AXIS_R_SINGLE;
+    const wrapAttrs = String(o.wrapAttrs || "");
+    const aria = esc(o.ariaLabel || "추이");
+    return `<div class="ending-dev-chart__stage">
+      <div class="ending-dev-chart__axis ending-dev-chart__axis--left">${o.axisLeft || ""}</div>
+      <div class="ending-dev-chart__plot-scroll" data-chart-plot-scroll tabindex="0" aria-label="그래프 시간 이동">
+        <div class="ending-dev-chart__wrap" data-chart-wrap ${wrapAttrs}
+          style="width:${plotW}px"
+          data-chart-width="${plotW}" data-chart-height="${h}"
+          data-chart-plot-base="${Number(o.plotBase) || 0}"
+          data-chart-full-min="${o.fullMinMs}" data-chart-full-max="${o.fullMaxMs}"
+          data-chart-pad="${esc(JSON.stringify(plotPad))}">
+          <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${plotW} ${h}" width="${plotW}" height="${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${aria}">
+            ${o.plotSvg || ""}
+          </svg>
+          <div class="ending-dev-chart__overlay" data-chart-overlay aria-hidden="true" style="width:${plotW}px;height:${h}px"></div>
+        </div>
+      </div>
+      ${dual ? `<div class="ending-dev-chart__axis ending-dev-chart__axis--right">${o.axisRight || ""}</div>` : `<div class="ending-dev-chart__axis ending-dev-chart__axis--right ending-dev-chart__axis--gutter" aria-hidden="true"></div>`}
+    </div>`;
+  }
 
   function chartActiveFullTimeRange() {
     const wrap = els.dataBody?.querySelector?.("[data-chart-wrap]");
@@ -719,37 +769,6 @@
     return dx;
   }
 
-  function scheduleChartPanFromWheel(wrap, deltaPx) {
-    if (!wrap || chartIsFitZoom()) return;
-    const chart = wrap.closest(".ending-dev-chart");
-    const scroller = chart?.querySelector?.("[data-chart-pan-scroll]");
-    if (!scroller) return;
-    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
-    if (max <= 0) return;
-    scroller.scrollLeft = Math.max(0, Math.min(max, scroller.scrollLeft + deltaPx));
-    scheduleChartPanFromScroll(scroller);
-  }
-
-  function onChartPanWheel(ev) {
-    if (chartIsFitZoom()) return;
-    const chart = ev.target?.closest?.(".ending-dev-chart");
-    if (!chart) return;
-    const viewport = chart.querySelector(".ending-dev-chart__viewport");
-    const wrap = chart.querySelector("[data-chart-wrap]");
-    if (!viewport || !wrap) return;
-    const dx = chartPanWheelDelta(ev);
-    if (Math.abs(dx) < 0.5) return;
-    ev.preventDefault();
-    scheduleChartPanFromWheel(wrap, dx);
-  }
-
-  function scheduleChartPanFromScroll(scroller) {
-    if (!scroller) return;
-    updateChartPanSlide(scroller);
-    clearTimeout(chartPanScrollTimer);
-    chartPanScrollTimer = setTimeout(() => commitChartPanFromScroller(scroller), 140);
-  }
-
   function chartZoomSliderValue(zoom) {
     const z = Math.max(CHART_ZOOM_MIN, Math.min(CHART_ZOOM_MAX, Number(zoom) || CHART_ZOOM_DEFAULT));
     if (CHART_ZOOM_MAX <= CHART_ZOOM_MIN) return 0;
@@ -771,9 +790,18 @@
     return Number(zoom) <= CHART_ZOOM_MIN + 0.001;
   }
 
+  function chartRenderPlotMetrics(dual = true) {
+    const axisR = dual ? CHART_AXIS_R_DUAL : CHART_AXIS_R_SINGLE;
+    const plotBase = Math.max(180, chartLogicalWidth() - CHART_AXIS_L - axisR);
+    const plotW = chartPlotContentWidth(plotBase);
+    return { plotBase, plotW, axisR, pad: CHART_PLOT_PAD };
+  }
+
   function chartLayoutWidth(rootEl) {
     const root = rootEl || els.dataBody;
     if (!root) return CHART_W;
+    const stage = root.querySelector?.(".ending-dev-chart__stage");
+    if (stage?.clientWidth >= CHART_W_MIN) return Math.round(stage.clientWidth);
     const viewport = root.querySelector?.(".ending-dev-chart__viewport");
     if (viewport?.clientWidth >= CHART_W_MIN) return Math.round(viewport.clientWidth);
     const digest = root.querySelector?.(".ending-dev-digest");
@@ -1806,24 +1834,14 @@
     return layoutPeakMarks(items, pad, w, h);
   }
 
-  function scrollChartXIntoView(wrap, chartX, fullMinMs, fullMaxMs, viewMinMs, viewMaxMs) {
-    if (chartIsFitZoom() || !fullMinMs || !fullMaxMs) return;
-    const w = Number(wrap?.dataset?.chartWidth) || CHART_W;
-    const padRaw = wrap?.dataset?.chartPad;
-    let pad = CHART_PAD_DUAL;
-    try {
-      if (padRaw) pad = JSON.parse(padRaw);
-    } catch (_) {
-      /* ignore */
-    }
-    const xInset = CHART_X_INSET;
-    const innerW = w - pad.l - pad.r;
-    const xSpan = Math.max(0, innerW - xInset * 2);
-    const ratio = Math.max(0, Math.min(1, (Number(chartX) - pad.l - xInset) / xSpan));
-    const vMin = Number(viewMinMs) || fullMinMs;
-    const vMax = Number(viewMaxMs) || fullMaxMs;
-    const centerMs = vMin + ratio * Math.max(1, vMax - vMin);
-    setChartPanLevel(chartPanForCenterTime(fullMinMs, fullMaxMs, centerMs));
+  function scrollChartXIntoView(wrap, chartX) {
+    if (chartIsFitZoom() || !wrap) return;
+    const scroller = wrap.closest(".ending-dev-chart")?.querySelector?.("[data-chart-plot-scroll]");
+    if (!scroller) return;
+    const max = Math.max(0, scroller.scrollWidth - scroller.clientWidth);
+    const target = Number(chartX) - scroller.clientWidth / 2;
+    scroller.scrollLeft = Math.max(0, Math.min(max, target));
+    scheduleChartPanFromPlotScroll(scroller);
   }
 
   let chartBindToken = 0;
@@ -1925,7 +1943,7 @@
         chartX: xAtTime(p.at),
       };
       pinHit(hit, { openTab: true });
-      scrollChartXIntoView(wrap, hit.chartX, fullMinMs, fullMaxMs, minMs, maxMs);
+      scrollChartXIntoView(wrap, hit.chartX);
     }
 
     overlay.addEventListener("mousemove", (ev) => {
@@ -2070,7 +2088,7 @@
       const want = parseChartDate(at)?.getTime();
       const snap = nearestMergedPointAtTime(merged, want);
       pinSnap(snap, { openTab: true });
-      if (snap) scrollChartXIntoView(wrap, xAtTime(snap.at), fullMinMs, fullMaxMs, minMs, maxMs);
+      if (snap) scrollChartXIntoView(wrap, xAtTime(snap.at));
     }
 
     overlay.addEventListener("mousemove", (ev) => {
@@ -2098,49 +2116,44 @@
       return `<p class="ending-dev-empty ending-dev-data-empty">${esc(emptyMsg)}</p>`;
     }
     const h = CHART_H;
-    const pad = CHART_PAD_SINGLE;
-    const w = chartLogicalWidth();
+    const { plotBase, plotW, pad } = chartRenderPlotMetrics(false);
     const timeRange = chartTimeRangeFromPoints(points);
     if (!timeRange) {
       return `<p class="ending-dev-empty ending-dev-data-empty">${esc(emptyMsg)}</p>`;
     }
     const { minMs: fullMinMs, maxMs: fullMaxMs } = timeRange;
-    const win = chartVisibleWindow(fullMinMs, fullMaxMs);
-    const { viewMinMs, viewMaxMs } = win;
     const maxV = chartScaleMax(Math.max(...points.map((p) => p.v), 0));
     const { innerH, xAtTime, yViewers: yAt } = chartDualTimeLayout(
       pad,
-      w,
+      plotW,
       h,
-      viewMinMs,
-      viewMaxMs,
+      fullMinMs,
+      fullMaxMs,
       maxV,
       maxV
     );
-    const visiblePoints = chartSeriesInWindow(points, viewMinMs, viewMaxMs);
-    const linePts = visiblePoints.map((p) => ({
+    const linePts = points.map((p) => ({
       x: Number(xAtTime(p.at)),
       y: Number(yAt(p.v)),
     }));
     const line = pathSmoothFromXY(linePts);
-    const area = `${line} L${xAtTime(new Date(viewMaxMs).toISOString()).toFixed(1)},${(pad.t + innerH).toFixed(1)} L${xAtTime(new Date(viewMinMs).toISOString()).toFixed(1)},${(pad.t + innerH).toFixed(1)} Z`;
+    const area = `${line} L${xAtTime(new Date(fullMaxMs).toISOString()).toFixed(1)},${(pad.t + innerH).toFixed(1)} L${xAtTime(new Date(fullMinMs).toISOString()).toFixed(1)},${(pad.t + innerH).toFixed(1)} Z`;
     const yTicks = [0, Math.round(maxV / 2), maxV];
-    const yLines = yTicks
+    const yGrid = yTicks
       .map((v) => {
         const y = yAt(v).toFixed(1);
-        return `<line class="ending-dev-chart__grid" x1="${pad.l}" y1="${y}" x2="${w - pad.r}" y2="${y}" />
-          <text class="ending-dev-chart__ylabel" x="${pad.l - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${esc(fmtNum(v))}</text>`;
+        return `<line class="ending-dev-chart__grid" x1="${pad.l}" y1="${y}" x2="${plotW - pad.r}" y2="${y}" />`;
       })
       .join("");
-    const tickTimes = chartTimeTickTimes(viewMinMs, viewMaxMs, w - pad.l - pad.r);
-    const xLabels = renderChartTimeAxisDual(tickTimes, xAtTime, pad, w, h);
+    const axisLeft = renderChartYAxisLeft(yTicks, yAt, h);
+    const tickTimes = chartTimeTickTimes(fullMinMs, fullMaxMs, plotW - pad.l - pad.r);
+    const xLabels = renderChartTimeAxisDual(tickTimes, xAtTime, pad, plotW, h);
     const lineColor = o.lineColor || "var(--dev-blue)";
     const areaColor = o.areaColor || "rgba(47, 95, 154, 0.12)";
-    const meta = typeof o.meta === "function" ? o.meta(points, maxV) : String(o.meta || "");
     const jumps = Array.isArray(o.jumps) ? o.jumps.filter(Boolean) : [];
     const peakJump = jumps.find((j) => j && j.kind !== "chat") || jumps[0];
     let peakMark = "";
-    if (peakJump && chartTimeInWindow(peakJump.at, viewMinMs, viewMaxMs)) {
+    if (peakJump) {
       let idx = points.findIndex((p) => p.at === peakJump.at);
       if (idx < 0) {
         const want = chartMinuteMs(peakJump.at);
@@ -2150,25 +2163,13 @@
         const peakV = Math.max(Number(peakJump.v) || 0, Number(points[idx].v) || 0);
         peakMark = renderPeakMark({ v: peakV }, xAtTime(points[idx].at), yAt(peakV), "", {}, {
           pad,
-          w,
+          w: plotW,
           h,
         });
       }
     }
-    return `<div class="ending-dev-chart">
-      ${renderChartToolbar({ jumps, meta: typeof o.meta === "function" ? o.meta(points, maxV) : String(o.meta || "") })}
-      ${renderChartZoomControls()}
-      <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
-        <div class="ending-dev-chart__tip" data-chart-tip></div>
-      </div>
-      <div class="ending-dev-chart__viewport">
-      <div class="ending-dev-chart__wrap" data-chart-wrap
-        data-chart-width="${w}" data-chart-height="${h}"
-        data-chart-full-min="${fullMinMs}" data-chart-full-max="${fullMaxMs}"
-        data-chart-pad="${esc(JSON.stringify(pad))}">
-        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="${esc(o.ariaLabel || "추이")}">
-          ${renderChartClipDef(pad, w, h)}
-          ${yLines}
+    const plotSvg = `${renderChartClipDef(pad, plotW, h)}
+          ${yGrid}
           <g clip-path="url(#ending-dev-chart-clip)">
           <path class="ending-dev-chart__area" style="fill:${esc(areaColor)}" d="${area}" />
           <path class="ending-dev-chart__line" style="stroke:${esc(lineColor)}" d="${line}" />
@@ -2176,19 +2177,31 @@
           ${xLabels}
           ${peakMark}
           <circle class="ending-dev-chart__marker" data-chart-marker hidden vector-effect="non-scaling-stroke" cx="0" cy="0" r="3.5" />
-          <line class="ending-dev-chart__cursor" data-chart-cursor hidden x1="0" y1="0" x2="0" y2="0" />
-        </svg>
-        <div class="ending-dev-chart__overlay" data-chart-overlay aria-hidden="true"></div>
+          <line class="ending-dev-chart__cursor" data-chart-cursor hidden x1="0" y1="0" x2="0" y2="0" />`;
+    return `<div class="ending-dev-chart">
+      ${renderChartToolbar({ jumps, meta: typeof o.meta === "function" ? o.meta(points, maxV) : String(o.meta || "") })}
+      ${renderChartZoomControls()}
+      <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
+        <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
-      </div>
-      ${renderChartPanScroll()}
+      ${renderChartPlotStage({
+        dual: false,
+        h,
+        plotW,
+        plotBase,
+        fullMinMs,
+        fullMaxMs,
+        axisLeft,
+        ariaLabel: o.ariaLabel || "추이",
+        plotSvg,
+      })}
     </div>`;
   }
 
   function mountMetricChartInteraction(root, opts) {
     const wrap = root?.querySelector?.("[data-chart-wrap]");
     if (!wrap || !opts?.points?.length) return;
-    let pad = CHART_PAD_SINGLE;
+    let pad = CHART_PLOT_PAD;
     try {
       const parsed = JSON.parse(wrap.dataset.chartPad || "{}");
       if (parsed && typeof parsed === "object") pad = parsed;
@@ -2197,7 +2210,6 @@
     }
     const fullMinMs = Number(wrap.dataset.chartFullMin);
     const fullMaxMs = Number(wrap.dataset.chartFullMax);
-    const win = chartVisibleWindow(fullMinMs, fullMaxMs);
     bindInteractiveChart(wrap, {
       points: opts.points,
       replay: opts.replay,
@@ -2205,8 +2217,8 @@
       width: Number(wrap.dataset.chartWidth) || CHART_W,
       height: Number(wrap.dataset.chartHeight) || CHART_H,
       pad,
-      minMs: win.viewMinMs,
-      maxMs: win.viewMaxMs,
+      minMs: fullMinMs,
+      maxMs: fullMaxMs,
       fullMinMs,
       fullMaxMs,
       valueSuffix: opts.valueSuffix || "",
@@ -2226,7 +2238,7 @@
       };
     }
     const h = CHART_H;
-    const pad = CHART_PAD_DUAL;
+    const { plotBase, plotW, pad } = chartRenderPlotMetrics(true);
     const timeRange = chartTimeRangeFromPoints(viewers, chats);
     if (!timeRange) {
       return {
@@ -2235,41 +2247,31 @@
       };
     }
     const { minMs: fullMinMs, maxMs: fullMaxMs } = timeRange;
-    const win = chartVisibleWindow(fullMinMs, fullMaxMs);
-    const { viewMinMs, viewMaxMs } = win;
-    const w = chartLogicalWidth();
     const maxViewers = chartScaleMax(Math.max(...viewers.map((p) => p.v), 0));
     const maxChats = chartScaleMax(Math.max(...chats.map((p) => p.v), 0));
-    const { innerH, xAtTime, yViewers, yChats } = chartDualTimeLayout(
+    const { xAtTime, yViewers, yChats } = chartDualTimeLayout(
       pad,
-      w,
+      plotW,
       h,
-      viewMinMs,
-      viewMaxMs,
+      fullMinMs,
+      fullMaxMs,
       maxViewers,
       maxChats
     );
-    const visibleViewers = chartSeriesInWindow(viewers, viewMinMs, viewMaxMs);
-    const visibleChats = chartSeriesInWindow(chats, viewMinMs, viewMaxMs);
-    const viewerLine = pathForSeriesPointsSmooth(visibleViewers, xAtTime, yViewers);
-    const chatLine = pathForSeriesPointsSmooth(visibleChats, xAtTime, yChats);
+    const viewerLine = pathForSeriesPointsSmooth(viewers, xAtTime, yViewers);
+    const chatLine = pathForSeriesPointsSmooth(chats, xAtTime, yChats);
     const yTicksViewers = [0, Math.round(maxViewers / 2), maxViewers];
     const yTicksChats = [0, Math.round(maxChats / 2), maxChats];
-    const yLines = yTicksViewers
+    const yGrid = yTicksViewers
       .map((v) => {
         const y = yViewers(v).toFixed(1);
-        return `<line class="ending-dev-chart__grid" x1="${pad.l}" y1="${y}" x2="${w - pad.r}" y2="${y}" />
-          <text class="ending-dev-chart__ylabel" x="${pad.l - 8}" y="${y}" text-anchor="end" dominant-baseline="middle">${esc(fmtNum(v))}</text>`;
+        return `<line class="ending-dev-chart__grid" x1="${pad.l}" y1="${y}" x2="${plotW - pad.r}" y2="${y}" />`;
       })
       .join("");
-    const yRight = yTicksChats
-      .map((v) => {
-        const y = yChats(v).toFixed(1);
-        return `<text class="ending-dev-chart__ylabel ending-dev-chart__ylabel--right" x="${w - pad.r + 8}" y="${y}" text-anchor="start" dominant-baseline="middle">${esc(fmtNum(v))}</text>`;
-      })
-      .join("");
-    const tickTimes = chartTimeTickTimes(viewMinMs, viewMaxMs, w - pad.l - pad.r);
-    const xLabels = renderChartTimeAxisDual(tickTimes, xAtTime, pad, w, h);
+    const axisLeft = renderChartYAxisLeft(yTicksViewers, yViewers, h);
+    const axisRight = renderChartYAxisRight(yTicksChats, yChats, h);
+    const tickTimes = chartTimeTickTimes(fullMinMs, fullMaxMs, plotW - pad.l - pad.r);
+    const xLabels = renderChartTimeAxisDual(tickTimes, xAtTime, pad, plotW, h);
     const lastViewers = Number(counts?.lastViewerCount) || viewers[viewers.length - 1]?.v || 0;
     const viewerPeak = resolveViewerPeak(viewers, counts);
     const chatPeak = resolveChatPeak(chats);
@@ -2286,28 +2288,14 @@
       xAtTime,
       yViewers,
       yChats,
-      viewMinMs,
-      viewMaxMs,
+      fullMinMs,
+      fullMaxMs,
       pad,
-      w,
+      plotW,
       h
     );
-    return {
-      html: `<div class="ending-dev-chart ending-dev-chart--dual">
-      ${renderChartToolbar({ jumps: [viewerPeak, chatPeak], meta, showLegend: true })}
-      ${renderChartZoomControls()}
-      <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
-        <div class="ending-dev-chart__tip" data-chart-tip></div>
-      </div>
-      <div class="ending-dev-chart__viewport">
-      <div class="ending-dev-chart__wrap" data-chart-wrap data-chart-dual="1"
-        data-chart-width="${w}" data-chart-height="${h}"
-        data-chart-full-min="${fullMinMs}" data-chart-full-max="${fullMaxMs}"
-        data-chart-pad="${esc(JSON.stringify(pad))}">
-        <svg class="ending-dev-chart__svg" data-chart-svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="xMinYMid meet" role="img" aria-label="시청자·채팅 화력 추이">
-          ${renderChartClipDef(pad, w, h)}
-          ${yLines}
-          ${yRight}
+    const plotSvg = `${renderChartClipDef(pad, plotW, h)}
+          ${yGrid}
           <g clip-path="url(#ending-dev-chart-clip)">
           ${viewerLine ? `<path class="ending-dev-chart__line ending-dev-chart__line--viewers" d="${viewerLine}" />` : ""}
           ${chatLine ? `<path class="ending-dev-chart__line ending-dev-chart__line--chat" d="${chatLine}" />` : ""}
@@ -2316,12 +2304,27 @@
           ${peakMarks}
           <circle class="ending-dev-chart__marker ending-dev-chart__marker--viewers" data-chart-marker-viewers hidden vector-effect="non-scaling-stroke" cx="0" cy="0" r="3.5" />
           <circle class="ending-dev-chart__marker ending-dev-chart__marker--chat" data-chart-marker-chats hidden vector-effect="non-scaling-stroke" cx="0" cy="0" r="3.5" />
-          <line class="ending-dev-chart__cursor" data-chart-cursor hidden x1="0" y1="0" x2="0" y2="0" />
-        </svg>
-        <div class="ending-dev-chart__overlay" data-chart-overlay aria-hidden="true"></div>
+          <line class="ending-dev-chart__cursor" data-chart-cursor hidden x1="0" y1="0" x2="0" y2="0" />`;
+    return {
+      html: `<div class="ending-dev-chart ending-dev-chart--dual">
+      ${renderChartToolbar({ jumps: [viewerPeak, chatPeak], meta, showLegend: true })}
+      ${renderChartZoomControls()}
+      <div class="ending-dev-chart__readout" data-chart-readout aria-live="polite">
+        <div class="ending-dev-chart__tip" data-chart-tip></div>
       </div>
-      </div>
-      ${renderChartPanScroll()}
+      ${renderChartPlotStage({
+        dual: true,
+        h,
+        plotW,
+        plotBase,
+        fullMinMs,
+        fullMaxMs,
+        wrapAttrs: `data-chart-dual="1"`,
+        axisLeft,
+        axisRight,
+        ariaLabel: "시청자·채팅 화력 추이",
+        plotSvg,
+      })}
     </div>`,
       bind: {
         kind: "dual",
@@ -2329,11 +2332,11 @@
         viewerPoints: viewers,
         chatPoints: chats,
         replay,
-        width: w,
+        width: plotW,
         height: h,
         pad,
-        minMs: viewMinMs,
-        maxMs: viewMaxMs,
+        minMs: fullMinMs,
+        maxMs: fullMaxMs,
         fullMinMs,
         fullMaxMs,
         maxViewers,
@@ -2345,18 +2348,27 @@
   function mountDualMetricChartInteraction(root, opts) {
     const wrap = root?.querySelector?.("[data-chart-wrap][data-chart-dual]");
     if (!wrap || !opts?.merged?.length) return;
+    let pad = CHART_PLOT_PAD;
+    try {
+      const parsed = JSON.parse(wrap.dataset.chartPad || "{}");
+      if (parsed && typeof parsed === "object") pad = parsed;
+    } catch (_) {
+      /* ignore */
+    }
+    const fullMinMs = Number(wrap.dataset.chartFullMin);
+    const fullMaxMs = Number(wrap.dataset.chartFullMax);
     bindDualInteractiveChart(wrap, {
       merged: opts.merged,
       viewerPoints: opts.viewerPoints,
       chatPoints: opts.chatPoints,
       replay: opts.replay,
-      width: opts.width || Number(wrap.dataset.chartWidth) || CHART_W,
-      height: opts.height || Number(wrap.dataset.chartHeight) || CHART_H,
-      pad: opts.pad || CHART_PAD_DUAL,
-      minMs: opts.minMs,
-      maxMs: opts.maxMs,
-      fullMinMs: opts.fullMinMs,
-      fullMaxMs: opts.fullMaxMs,
+      width: Number(wrap.dataset.chartWidth) || opts.width || CHART_W,
+      height: Number(wrap.dataset.chartHeight) || opts.height || CHART_H,
+      pad,
+      minMs: fullMinMs,
+      maxMs: fullMaxMs,
+      fullMinMs,
+      fullMaxMs,
       maxViewers: opts.maxViewers,
       maxChats: opts.maxChats,
     });
@@ -2448,7 +2460,7 @@
     oldChart.replaceWith(newChart);
     if (chart.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, chart.bind);
     else if (chart.bind) mountMetricChartInteraction(els.dataBody, chart.bind);
-    syncChartPanScroll(els.dataBody);
+    syncChartPlotScroll(els.dataBody);
     return true;
   }
 
@@ -2950,7 +2962,7 @@
     if (overview.bind?.kind === "dual") mountDualMetricChartInteraction(els.dataBody, overview.bind);
     else if (overview.bind) mountMetricChartInteraction(els.dataBody, overview.bind);
 
-    syncChartPanScroll(els.dataBody);
+    syncChartPlotScroll(els.dataBody);
     restoreScrollState(els.dataBody, scrollState);
     requestAnimationFrame(() => {
       const fittedW = chartLayoutWidth(els.dataBody);
@@ -2962,7 +2974,7 @@
         renderDataPanel(acc.sections, (acc.session || {}).collected || {});
         return;
       }
-      syncChartPanScroll(els.dataBody);
+      syncChartPlotScroll(els.dataBody);
       restoreScrollState(els.dataBody, scrollState);
       persistScrollState(captureScrollState(els.dataBody));
     });
@@ -3448,8 +3460,8 @@
   els.auto?.addEventListener("change", () => schedule());
   window.addEventListener("scroll", scheduleScrollPersist, { passive: true });
   els.dataBody?.addEventListener("scroll", (ev) => {
-    const scroller = ev.target?.closest?.("[data-chart-pan-scroll]");
-    if (scroller) scheduleChartPanFromScroll(scroller);
+    const scroller = ev.target?.closest?.("[data-chart-plot-scroll]");
+    if (scroller) scheduleChartPanFromPlotScroll(scroller);
     scheduleScrollPersist();
   }, { passive: true, capture: true });
   els.dataBody?.addEventListener("wheel", onChartPanWheel, { passive: false, capture: true });
@@ -3457,7 +3469,7 @@
     "resize",
     () => {
       if (!els.dataBody) return;
-      syncChartPanScroll(els.dataBody);
+      syncChartPlotScroll(els.dataBody);
       scheduleChartLayoutRerender();
     },
     { passive: true }
