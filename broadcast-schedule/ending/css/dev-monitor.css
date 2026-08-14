@@ -164,6 +164,22 @@
   gap: 0.55rem;
 }
 
+.ending-dev-bar--standalone {
+  gap: 0.75rem;
+}
+
+.ending-dev-bar--standalone .ending-dev-bar__tools {
+  margin-left: auto;
+}
+
+.ending-dev-page--standalone .ending-dev-gate {
+  margin-top: 2rem;
+}
+
+.ending-dev-page--standalone .ending-dev-gate .ending-dev-refresh--primary {
+  margin-top: 0.35rem;
+}
+
 .ending-dev-stamp {
   font-family: var(--dev-mono);
   font-size: 0.72rem;

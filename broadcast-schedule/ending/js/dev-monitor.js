@@ -1,7 +1,14 @@
 (() => {
   const TOKEN_KEY = "ending_soop_access_token";
-  const MONITOR_MODE = window.ENDING_MONITOR_MODE === "me" ? "me" : "sirian";
+  const MONITOR_MODE =
+    window.ENDING_MONITOR_MODE === "me"
+      ? "me"
+      : window.ENDING_MONITOR_MODE === "live_data"
+        ? "live_data"
+        : "sirian";
   const isMeMonitor = () => MONITOR_MODE === "me";
+  const isLiveDataPage = () => MONITOR_MODE === "live_data";
+  const monitorApiBase = () => (isLiveDataPage() ? "/api/credits/live-data" : "/api/credits/dev-monitor");
   const base = () => window.CREDITS_BASE || "";
   const POLL_MS = 5000;
   /** VOD 다시보기: 차트 분 버킷(00초)보다 앞에서 재생해 맥락을 보여준다. */
@@ -34,6 +41,7 @@
     dataBody: document.getElementById("acc-data-body"),
     dataHint: document.getElementById("acc-data-hint"),
     segments: document.getElementById("acc-segments"),
+    gateLogin: document.getElementById("btn-live-data-login"),
   };
 
   const DATA_TAB_KEY = "ending_dev_monitor_data_tab";
@@ -2354,7 +2362,7 @@
     let items = Array.isArray(fromPayload) ? fromPayload : null;
     if (!items) {
       const res = await fetchJson(
-        `/api/credits/dev-monitor/archive-dates?stationId=${encodeURIComponent(sid)}&limit=90`,
+        `${monitorApiBase()}/archive-dates?stationId=${encodeURIComponent(sid)}&limit=90`,
         { headers: authHeaders() }
       );
       items = Array.isArray(res?.items) ? res.items : [];
@@ -2385,7 +2393,7 @@
     els.historyList.innerHTML = `<p class="ending-muted">불러오는 중…</p>`;
     try {
       const res = await fetchJson(
-        `/api/credits/dev-monitor/archives?stationId=${encodeURIComponent(sid)}&date=${encodeURIComponent(
+        `${monitorApiBase()}/archives?stationId=${encodeURIComponent(sid)}&date=${encodeURIComponent(
           historyDate
         )}&limit=40`,
         { headers: authHeaders() }
@@ -2431,7 +2439,7 @@
     historyArchiveId = aid;
     try {
       const packed = await fetchJson(
-        `/api/credits/dev-monitor/archive?archiveId=${encodeURIComponent(aid)}`,
+        `${monitorApiBase()}/archive?archiveId=${encodeURIComponent(aid)}`,
         { headers: authHeaders() }
       );
       if (!packed?.ok && packed?.error) throw new Error(packed.error);
@@ -2571,18 +2579,20 @@
     if (els.app) els.app.hidden = true;
     if (els.gate) els.gate.hidden = false;
     if (els.gateMsg && msg) els.gateMsg.textContent = msg;
+    if (els.gateLogin) els.gateLogin.hidden = false;
   }
 
   function showApp() {
     if (els.gate) els.gate.hidden = true;
     if (els.app) els.app.hidden = false;
+    if (els.gateLogin) els.gateLogin.hidden = true;
   }
 
   async function refresh() {
     if (busy) return;
     busy = true;
     try {
-      const data = await fetchJson("/api/credits/dev-monitor", { headers: authHeaders() });
+      const data = await fetchJson(monitorApiBase(), { headers: authHeaders() });
       if (!data?.ok) throw new Error(data?.error || "monitor_failed");
       showApp();
       paint(data);
@@ -2592,7 +2602,15 @@
       }
     } catch (err) {
       const code = err?.data?.error || err.message;
-      if (err.status === 403 || code === "overlay_dev_required") {
+      if (isLiveDataPage()) {
+        if (err.status === 403 || code === "staff_access_required" || code === "overlay_dev_required") {
+          showGate("접근 권한이 없습니다. 시리안 또는 허용된 계정으로 숲 로그인해 주세요.");
+        } else if (err.status === 401) {
+          showGate("숲 로그인이 필요합니다.");
+        } else {
+          showGate(`데이터를 불러오지 못했습니다: ${code}`);
+        }
+      } else if (err.status === 403 || code === "overlay_dev_required") {
         showGate("오버레이 개발자 계정으로 수집기에서 로그인한 뒤 다시 열어 주세요.");
       } else if (err.status === 401) {
         showGate("숲 로그인이 필요합니다. 수집기에서 로그인해 주세요.");
@@ -2643,6 +2661,8 @@
   els.auto?.addEventListener("change", () => schedule());
   window.addEventListener("scroll", scheduleScrollPersist, { passive: true });
   els.dataBody?.addEventListener("scroll", scheduleScrollPersist, { passive: true, capture: true });
+
+  window.__liveDataRefresh = () => refresh();
 
   refresh().then(() => schedule());
 })();

@@ -189,6 +189,9 @@ def _ending_soop_page_gate():
             return None
         # 오버레이 개발자만 — 스태프여도 개발자 목록이 아니면 수집기로
         return _ending_staff_html_forbidden()
+    if path in ("/live_data", "/live_data/"):
+        # 공개 HTML — 숲 로그인·권한은 API·클라이언트 게이트
+        return None
     return None
 
 
@@ -1376,6 +1379,21 @@ def _require_overlay_dev() -> tuple[str, tuple[Any, int] | None]:
     return "", (jsonify({"ok": False, "error": "overlay_dev_required"}), 403)
 
 
+def _require_staff_viewer() -> tuple[str, tuple[Any, int] | None]:
+    """시리안(허용 BJ) 또는 오버레이 개발자. (station_id, err_or_None)."""
+    cookie_sid = _ending_soop_cookie_station()
+    if cookie_sid:
+        return cookie_sid, None
+    token = _extract_soop_access_token()
+    if token:
+        sid, err, status = _soop_identity_from_token(token)
+        if not err and sid and _ending_staff_station(sid):
+            return str(sid).lower(), None
+        if err:
+            return "", (jsonify({"ok": False, "error": err}), status)
+    return "", (jsonify({"ok": False, "error": "staff_access_required"}), 403)
+
+
 def _request_body_station_id() -> str:
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
@@ -1596,6 +1614,7 @@ def _bootstrap_payload() -> dict:
         "hasClientSecret": bool(os.environ.get("SOOP_CLIENT_SECRET", "").strip()),
         "sdkScriptUrl": "https://static.sooplive.com/asset/app/chat-sdk/sooplive-chat-sdk.js",
         "oauthRedirectPath": "/ending/",
+        "liveDataPath": "/ending/live_data",
         "obsPath": f"/ending/obs?obs=1&stationId={urllib.parse.quote(live_sid)}",
         "demoObsPath": f"/ending/obs?obs=1&demo=1&stationId={urllib.parse.quote(live_sid)}",
         "studioPath": "/ending/studio",
@@ -1811,7 +1830,19 @@ def api_credits_dev_monitor():
     viewer_sid, err = _require_overlay_dev()
     if err:
         return err
+    return jsonify(_build_dev_monitor_payload(viewer_sid))
 
+
+@app.route("/api/credits/live-data")
+def api_credits_live_data():
+    """시리안·허용 스태프: 시리안 라이브/아카이브 데이터 (전용 페이지)."""
+    viewer_sid, err = _require_staff_viewer()
+    if err:
+        return err
+    return jsonify(_build_dev_monitor_payload(viewer_sid))
+
+
+def _build_dev_monitor_payload(viewer_sid: str) -> dict[str, Any]:
     store = get_store()
     sirian_sid = _sirian_station_id()
 
@@ -1996,24 +2027,44 @@ def api_credits_dev_monitor():
         )
     collectors.sort(key=lambda c: (0 if c.get("stationId") == sirian_sid else 1, c.get("stationId") or ""))
 
-    return jsonify(
-        {
-            "ok": True,
-            "viewerStationId": viewer_sid,
-            "sirianStationId": sirian_sid,
-            "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "ssapi": read_ssapi_collector_status(),
-            "live": live,
-            "livePreview": live_preview,
-            "activeBound": active_bound,
-            "collectors": collectors,
-            "sirian": sirian,
-            "allowedStationIds": sorted(_allowed_station_ids())
-            if not _allow_any_soop_station()
-            else ["*"],
-            "overlayDevStationIds": sorted(_overlay_dev_station_ids()),
-        }
-    )
+    return {
+        "ok": True,
+        "viewerStationId": viewer_sid,
+        "sirianStationId": sirian_sid,
+        "generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "ssapi": read_ssapi_collector_status(),
+        "live": live,
+        "livePreview": live_preview,
+        "activeBound": active_bound,
+        "collectors": collectors,
+        "sirian": sirian,
+        "allowedStationIds": sorted(_allowed_station_ids())
+        if not _allow_any_soop_station()
+        else ["*"],
+        "overlayDevStationIds": sorted(_overlay_dev_station_ids()),
+    }
+
+
+def _dev_monitor_archive_dates_payload(station_id: str, limit: int) -> dict[str, Any]:
+    sid = str(station_id or _sirian_station_id()).strip().lower()
+    if not _looks_like_soop_user_id(sid):
+        sid = _sirian_station_id()
+    items = get_store().list_archive_dates(limit=limit, station_id=sid)
+    return {"ok": True, "stationId": sid, "items": items, "count": len(items)}
+
+
+def _dev_monitor_archives_payload(station_id: str, date: str | None, limit: int) -> dict[str, Any]:
+    sid = str(station_id or _sirian_station_id()).strip().lower()
+    if not _looks_like_soop_user_id(sid):
+        sid = _sirian_station_id()
+    items = get_store().list_archives(date=date, limit=limit, station_id=sid)
+    return {
+        "ok": True,
+        "stationId": sid,
+        "date": date or "",
+        "items": items,
+        "count": len(items),
+    }
 
 
 @app.route("/api/credits/dev-monitor/archive-dates")
@@ -2022,14 +2073,24 @@ def api_credits_dev_monitor_archive_dates():
     if err:
         return err
     station_id = str(request.args.get("stationId") or _sirian_station_id()).strip().lower()
-    if not _looks_like_soop_user_id(station_id):
-        station_id = _sirian_station_id()
     try:
         limit = int(request.args.get("limit") or 90)
     except (TypeError, ValueError):
         limit = 90
-    items = get_store().list_archive_dates(limit=limit, station_id=station_id)
-    return jsonify({"ok": True, "stationId": station_id, "items": items, "count": len(items)})
+    return jsonify(_dev_monitor_archive_dates_payload(station_id, limit))
+
+
+@app.route("/api/credits/live-data/archive-dates")
+def api_credits_live_data_archive_dates():
+    viewer_sid, err = _require_staff_viewer()
+    if err:
+        return err
+    station_id = str(request.args.get("stationId") or _sirian_station_id()).strip().lower()
+    try:
+        limit = int(request.args.get("limit") or 90)
+    except (TypeError, ValueError):
+        limit = 90
+    return jsonify(_dev_monitor_archive_dates_payload(station_id, limit))
 
 
 @app.route("/api/credits/dev-monitor/archives")
@@ -2038,28 +2099,45 @@ def api_credits_dev_monitor_archives():
     if err:
         return err
     station_id = str(request.args.get("stationId") or _sirian_station_id()).strip().lower()
-    if not _looks_like_soop_user_id(station_id):
-        station_id = _sirian_station_id()
     date = str(request.args.get("date") or "").strip() or None
     try:
         limit = int(request.args.get("limit") or 40)
     except (TypeError, ValueError):
         limit = 40
-    items = get_store().list_archives(date=date, limit=limit, station_id=station_id)
-    return jsonify(
-        {
-            "ok": True,
-            "stationId": station_id,
-            "date": date or "",
-            "items": items,
-            "count": len(items),
-        }
-    )
+    return jsonify(_dev_monitor_archives_payload(station_id, date, limit))
+
+
+@app.route("/api/credits/live-data/archives")
+def api_credits_live_data_archives():
+    viewer_sid, err = _require_staff_viewer()
+    if err:
+        return err
+    station_id = str(request.args.get("stationId") or _sirian_station_id()).strip().lower()
+    date = str(request.args.get("date") or "").strip() or None
+    try:
+        limit = int(request.args.get("limit") or 40)
+    except (TypeError, ValueError):
+        limit = 40
+    return jsonify(_dev_monitor_archives_payload(station_id, date, limit))
 
 
 @app.route("/api/credits/dev-monitor/archive")
 def api_credits_dev_monitor_archive():
     viewer_sid, err = _require_overlay_dev()
+    if err:
+        return err
+    archive_id = str(request.args.get("archiveId") or request.args.get("id") or "").strip()
+    if not archive_id:
+        return jsonify({"ok": False, "error": "archiveId_required"}), 400
+    packed = _archive_monitor_payload(get_store(), archive_id)
+    if not packed:
+        return jsonify({"ok": False, "error": "archive_not_found", "archiveId": archive_id}), 404
+    return jsonify(packed)
+
+
+@app.route("/api/credits/live-data/archive")
+def api_credits_live_data_archive():
+    viewer_sid, err = _require_staff_viewer()
     if err:
         return err
     archive_id = str(request.args.get("archiveId") or request.args.get("id") or "").strip()
@@ -2821,6 +2899,12 @@ def ending_dev_monitor():
 @app.route("/dev/me/")
 def ending_dev_monitor_me():
     return send_from_directory(ENDING_DIR, "me.html")
+
+
+@app.route("/live_data")
+@app.route("/live_data/")
+def ending_live_data():
+    return send_from_directory(ENDING_DIR, "live_data.html")
 
 
 @app.route("/diary")
