@@ -1,0 +1,1857 @@
+/**
+ * 시안(designer/themes.html · themes.css) 글래스·투영 패널 스타일 포트.
+ * 슬롯/스케일은 holo-bridge.css 담당 (OBS CEF: transform scale, zoom 금지).
+ */
+.credits-holo__design {
+  --holo: #5ce1ff;
+  --holo-soft: rgba(92, 225, 255, 0.35);
+}
+
+.credits-holo__design *,
+.credits-holo__design *::before,
+.credits-holo__design *::after {
+  box-sizing: border-box;
+}
+
+.credits-holo__design .frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: #e8fbff;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 글래스 ── */
+.credits-holo__design .frame[data-theme="reportProj"] {
+  background: rgba(6, 18, 28, 0.72);
+  backdrop-filter: blur(10px) saturate(1.2);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  border: 1px solid rgba(92, 225, 255, 0.42);
+  box-shadow:
+    0 0 0 1px rgba(92, 225, 255, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 0 48px rgba(40, 160, 200, 0.08),
+    0 0 22px rgba(92, 225, 255, 0.14);
+  overflow: hidden;
+  animation: holo-panel-border-breathe 4.2s ease-in-out infinite;
+}
+
+@keyframes holo-panel-border-breathe {
+  0%,
+  100% {
+    border-color: rgba(92, 225, 255, 0.38);
+    box-shadow:
+      0 0 0 1px rgba(92, 225, 255, 0.08),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+      inset 0 0 40px rgba(40, 160, 200, 0.06),
+      0 0 16px rgba(92, 225, 255, 0.1);
+  }
+  50% {
+    border-color: rgba(160, 240, 255, 0.62);
+    box-shadow:
+      0 0 0 1px rgba(92, 225, 255, 0.22),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+      inset 0 0 48px rgba(40, 160, 200, 0.1),
+      0 0 28px rgba(92, 225, 255, 0.22);
+  }
+}
+
+.credits-holo__design .frame[data-theme="reportProj"]::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 5;
+  pointer-events: none;
+  border: 1px solid transparent;
+  animation: holo-panel-border-rgb 5.4s steps(1, end) infinite;
+}
+
+@keyframes holo-panel-border-rgb {
+  0%,
+  90%,
+  100% {
+    border-color: transparent;
+    box-shadow: none;
+  }
+  92% {
+    border-color: rgba(0, 220, 255, 0.45);
+    box-shadow: 2px 0 0 rgba(255, 60, 120, 0.28), -2px 0 0 rgba(0, 220, 255, 0.28);
+  }
+  94% {
+    border-color: rgba(255, 80, 140, 0.35);
+    box-shadow: -1px 0 0 rgba(0, 220, 255, 0.22), 1px 0 0 rgba(255, 60, 120, 0.22);
+  }
+  96% {
+    border-color: transparent;
+    box-shadow: none;
+  }
+}
+
+/* ── 투영 ── */
+.credits-holo__design .frame[data-theme="report"] {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+/* 투영은 박스 테두리 없음 — 글래스(reportProj)만 패널 보더 */
+.credits-holo__design .frame[data-theme="report"]::after {
+  content: none;
+  display: none;
+}
+
+.credits-holo__design .panel {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  color: #e8fbff;
+  font-variant-numeric: tabular-nums;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"] .panel {
+  padding: 0.95rem 0.9rem 0.75rem;
+  overflow: hidden;
+}
+
+.credits-holo__design .frame[data-theme="report"] .panel {
+  /* 장식 테두리 inset(1.5%/2%) 안쪽으로 여유 — 상하 잘림 방지 */
+  padding: 2.6% 3.2% 2.4%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* FX */
+.credits-holo__design .holo-haze {
+  position: absolute;
+  inset: 2% 0 8%;
+  z-index: 1;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at 50% 40%,
+    rgba(0, 8, 18, 0.55) 0%,
+    rgba(0, 10, 22, 0.28) 42%,
+    transparent 72%
+  );
+  opacity: 0.35;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"] .holo-haze {
+  opacity: 0.28;
+}
+
+.credits-holo__design .frame[data-theme="report"] .holo-haze {
+  opacity: 0.4;
+  background: radial-gradient(
+    ellipse at 50% 38%,
+    rgba(0, 6, 16, 0.55) 0%,
+    rgba(0, 10, 22, 0.28) 50%,
+    transparent 78%
+  );
+}
+
+.credits-holo__design .holo-rise {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.credits-holo__design .holo-rise::before {
+  content: "";
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  height: 2px;
+  bottom: -4%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(92, 225, 255, 0.15) 12%,
+    rgba(200, 255, 255, 0.95) 50%,
+    rgba(92, 225, 255, 0.15) 88%,
+    transparent 100%
+  );
+  box-shadow:
+    0 0 8px rgba(180, 250, 255, 0.85),
+    0 0 22px rgba(92, 225, 255, 0.55),
+    0 -18px 28px rgba(92, 225, 255, 0.18);
+  animation: holo-panel-rise-line 3.6s linear infinite;
+}
+
+.credits-holo__design .holo-rise::after {
+  content: "";
+  position: absolute;
+  left: 8%;
+  right: 8%;
+  height: 42%;
+  bottom: -42%;
+  background: linear-gradient(
+    180deg,
+    transparent 0%,
+    rgba(92, 225, 255, 0.07) 55%,
+    rgba(140, 240, 255, 0.16) 100%
+  );
+  animation: holo-panel-rise-wash 3.6s linear infinite;
+}
+
+@keyframes holo-panel-rise-line {
+  0% {
+    bottom: -4%;
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 1;
+  }
+  100% {
+    bottom: 104%;
+    opacity: 0;
+  }
+}
+
+@keyframes holo-panel-rise-wash {
+  0% {
+    bottom: -42%;
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.85;
+  }
+  100% {
+    bottom: 100%;
+    opacity: 0;
+  }
+}
+
+/* 테두리 띠 지지직 (시안 themes.css 와 동일) */
+.credits-holo__design .holo-glitch {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  opacity: 0.55;
+  mix-blend-mode: screen;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 2px,
+    rgba(140, 240, 255, 0.1) 2px,
+    rgba(140, 240, 255, 0.1) 3px
+  );
+  -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 0,
+      #000 10px,
+      transparent 10px,
+      transparent calc(100% - 10px),
+      #000 calc(100% - 10px)
+    ),
+    linear-gradient(
+      to right,
+      #000 0,
+      #000 10px,
+      transparent 10px,
+      transparent calc(100% - 10px),
+      #000 calc(100% - 10px)
+    );
+  -webkit-mask-composite: source-over;
+  mask-image: linear-gradient(
+      to bottom,
+      #000 0,
+      #000 10px,
+      transparent 10px,
+      transparent calc(100% - 10px),
+      #000 calc(100% - 10px)
+    ),
+    linear-gradient(
+      to right,
+      #000 0,
+      #000 10px,
+      transparent 10px,
+      transparent calc(100% - 10px),
+      #000 calc(100% - 10px)
+    );
+  mask-composite: add;
+  animation: holo-panel-edge-static 3.6s steps(2, end) infinite;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"] .holo-glitch {
+  opacity: 0.55;
+}
+
+.credits-holo__design .frame[data-theme="report"] .holo-glitch {
+  opacity: 0.5;
+}
+
+.credits-holo__design .holo-glitch::before,
+.credits-holo__design .holo-glitch::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.credits-holo__design .holo-glitch::before {
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 220, 255, 0.65),
+    transparent 40%,
+    transparent 60%,
+    rgba(255, 70, 130, 0.55)
+  );
+  animation: holo-panel-edge-tear 5.2s steps(1, end) infinite;
+}
+
+.credits-holo__design .holo-glitch::after {
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 70, 130, 0.5),
+    transparent 45%,
+    rgba(0, 220, 255, 0.55)
+  );
+  animation: holo-panel-edge-tear 5.2s steps(1, end) infinite;
+  animation-delay: 1.4s;
+}
+
+@keyframes holo-panel-edge-static {
+  0%,
+  86%,
+  100% {
+    opacity: 0.4;
+  }
+  88% {
+    opacity: 0.75;
+  }
+  91% {
+    opacity: 0.35;
+  }
+  93% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes holo-panel-edge-tear {
+  0%,
+  88%,
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+  90% {
+    opacity: 0.85;
+    transform: translateX(2px);
+  }
+  92% {
+    opacity: 0.5;
+    transform: translateX(-2px);
+  }
+  94% {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+.credits-holo__design .scan {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 3px,
+    rgba(100, 220, 255, 0.07) 3px,
+    rgba(100, 220, 255, 0.07) 4px
+  );
+  mix-blend-mode: screen;
+  opacity: 0.55;
+  -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 0,
+      #000 12px,
+      transparent 12px,
+      transparent calc(100% - 12px),
+      #000 calc(100% - 12px)
+    ),
+    linear-gradient(
+      to right,
+      #000 0,
+      #000 12px,
+      transparent 12px,
+      transparent calc(100% - 12px),
+      #000 calc(100% - 12px)
+    );
+  mask-image: linear-gradient(
+      to bottom,
+      #000 0,
+      #000 12px,
+      transparent 12px,
+      transparent calc(100% - 12px),
+      #000 calc(100% - 12px)
+    ),
+    linear-gradient(
+      to right,
+      #000 0,
+      #000 12px,
+      transparent 12px,
+      transparent calc(100% - 12px),
+      #000 calc(100% - 12px)
+    );
+  mask-composite: add;
+  animation: holo-panel-edge-flicker 4.5s steps(2, end) infinite;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"] .scan {
+  opacity: 0.5;
+}
+
+.credits-holo__design .frame[data-theme="report"] .scan {
+  opacity: 0.45;
+}
+
+@keyframes holo-panel-edge-flicker {
+  0%,
+  88%,
+  100% {
+    opacity: 0.4;
+  }
+  90% {
+    opacity: 0.7;
+  }
+  93% {
+    opacity: 0.35;
+  }
+}
+
+/* 페이지 전환: 박스 전체 지지직(약하게) + 조각 등장 */
+.credits-holo__design .frame.is-entering {
+  animation: holo-panel-box-glitch 0.42s steps(2, end) both;
+}
+
+.credits-holo__design .frame.is-entering .panel {
+  animation: holo-panel-content-tear 0.42s steps(2, end) both;
+}
+
+.credits-holo__design .frame.is-entering .holo-glitch {
+  -webkit-mask-image: none;
+  mask-image: none;
+  opacity: 0.38;
+  mix-blend-mode: screen;
+  background: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 2px,
+    rgba(140, 240, 255, 0.09) 2px,
+    rgba(140, 240, 255, 0.09) 3px
+  );
+  animation: holo-panel-full-static 0.42s steps(2, end) both;
+}
+
+.credits-holo__design .frame.is-entering .holo-glitch::before,
+.credits-holo__design .frame.is-entering .holo-glitch::after {
+  height: 14%;
+  opacity: 0.28;
+  animation: holo-panel-band-tear 0.42s steps(2, end) both;
+}
+
+.credits-holo__design .frame.is-entering .holo-glitch::before {
+  top: 22%;
+  background: linear-gradient(
+    90deg,
+    rgba(0, 220, 255, 0.18),
+    transparent 40%,
+    transparent 60%,
+    rgba(255, 70, 130, 0.14)
+  );
+}
+
+.credits-holo__design .frame.is-entering .holo-glitch::after {
+  top: auto;
+  bottom: 26%;
+  animation-delay: 0.06s;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 70, 130, 0.12),
+    transparent 45%,
+    rgba(0, 220, 255, 0.16)
+  );
+}
+
+.credits-holo__design .frame.is-entering .scan {
+  -webkit-mask-image: none;
+  mask-image: none;
+  opacity: 0.42;
+  animation: holo-panel-full-static 0.42s steps(2, end) both;
+}
+
+@keyframes holo-panel-box-glitch {
+  0%,
+  100% {
+    filter: none;
+    transform: none;
+  }
+  15% {
+    filter: contrast(1.04) brightness(1.02);
+    transform: translateX(-1px);
+  }
+  30% {
+    filter: drop-shadow(1px 0 rgba(255, 60, 120, 0.22)) drop-shadow(-1px 0 rgba(0, 220, 255, 0.22));
+    transform: translateX(1px);
+  }
+  50% {
+    filter: none;
+    transform: translateX(-0.5px);
+  }
+  70% {
+    filter: contrast(1.03);
+    transform: none;
+  }
+}
+
+@keyframes holo-panel-content-tear {
+  0%,
+  100% {
+    transform: none;
+  }
+  18% {
+    transform: translateX(1px);
+  }
+  36% {
+    transform: translateX(-1px);
+  }
+  55% {
+    transform: none;
+  }
+}
+
+@keyframes holo-panel-full-static {
+  0%,
+  100% {
+    opacity: 0.18;
+  }
+  12% {
+    opacity: 0.42;
+  }
+  28% {
+    opacity: 0.2;
+  }
+  45% {
+    opacity: 0.38;
+  }
+  65% {
+    opacity: 0.22;
+  }
+}
+
+@keyframes holo-panel-band-tear {
+  0%,
+  100% {
+    opacity: 0;
+    transform: none;
+  }
+  18% {
+    opacity: 0.32;
+    transform: translateX(1px);
+  }
+  36% {
+    opacity: 0.16;
+    transform: translateX(-1.5px);
+  }
+  55% {
+    opacity: 0;
+    transform: none;
+  }
+}
+
+@keyframes holo-panel-piece-in {
+  0% {
+    opacity: 0;
+    transform: translateY(14px);
+    filter: blur(3px);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.credits-holo__design .frame.is-entering .rpt__head,
+.credits-holo__design .frame.is-entering .rpt__rule,
+.credits-holo__design .frame.is-entering .rpt__overview,
+.credits-holo__design .frame.is-entering .rpt__snap,
+.credits-holo__design .frame.is-entering .rpt__sec,
+.credits-holo__design .frame.is-entering .rpt__foot,
+.credits-holo__design .frame.is-entering .rpt__field,
+.credits-holo__design .frame.is-entering .rpt__table thead,
+.credits-holo__design .frame.is-entering .rpt__table tbody tr,
+.credits-holo__design .frame.is-entering .rpt__emo-card,
+.credits-holo__design .frame.is-entering .t-proj__brand,
+.credits-holo__design .frame.is-entering .t-proj__hero,
+.credits-holo__design .frame.is-entering .t-proj__sub,
+.credits-holo__design .frame.is-entering .rpt__cover > *,
+.credits-holo__design .frame.is-entering .rpt__next > *,
+.credits-holo__design .frame.is-entering .an__chart,
+.credits-holo__design .frame.is-entering .hl,
+.credits-holo__design .frame.is-entering .an__metrics > div,
+.credits-holo__design .frame.is-entering .hl__cap {
+  animation: holo-panel-piece-in 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.credits-holo__design .frame.is-entering .rpt__head {
+  animation-delay: 0.06s;
+}
+.credits-holo__design .frame.is-entering .rpt__rule {
+  animation-delay: 0.14s;
+}
+.credits-holo__design .frame.is-entering .rpt__overview {
+  animation-delay: 0.2s;
+}
+.credits-holo__design .frame.is-entering .rpt__snap {
+  animation-delay: 0.28s;
+}
+.credits-holo__design .frame.is-entering .rpt__sec {
+  animation-delay: 0.2s;
+}
+.credits-holo__design .frame.is-entering .rpt__foot {
+  animation-delay: 1.85s;
+}
+.credits-holo__design .frame.is-entering .rpt__table thead {
+  animation-delay: 0.24s;
+}
+.credits-holo__design .frame.is-entering .an__chart,
+.credits-holo__design .frame.is-entering .hl,
+.credits-holo__design .frame.is-entering .hl__cap {
+  animation-delay: 0.28s;
+}
+/* 순위 행: --i 기준 촤라락 (간격 ~0.13s) */
+.credits-holo__design .frame.is-entering .rpt__table tbody tr {
+  animation-delay: calc(0.34s + var(--i, 0) * 0.13s);
+}
+.credits-holo__design .frame.is-entering .rpt__emo-card {
+  animation-delay: calc(0.34s + var(--i, 0) * 0.16s);
+}
+.credits-holo__design .frame.is-entering .rpt__field:nth-child(1) {
+  animation-delay: 0.34s;
+}
+.credits-holo__design .frame.is-entering .rpt__field:nth-child(2) {
+  animation-delay: 0.47s;
+}
+.credits-holo__design .frame.is-entering .rpt__field:nth-child(3) {
+  animation-delay: 0.6s;
+}
+.credits-holo__design .frame.is-entering .rpt__field:nth-child(4) {
+  animation-delay: 0.73s;
+}
+.credits-holo__design .frame.is-entering .rpt__field:nth-child(5) {
+  animation-delay: 0.86s;
+}
+.credits-holo__design .frame.is-entering .t-proj__brand {
+  animation-delay: 0.1s;
+}
+.credits-holo__design .frame.is-entering .t-proj__hero {
+  animation-delay: 0.2s;
+}
+.credits-holo__design .frame.is-entering .t-proj__sub {
+  animation-delay: 0.32s;
+}
+.credits-holo__design .frame.is-entering .rpt__next > *:nth-child(1),
+.credits-holo__design .frame.is-entering .rpt__cover > *:nth-child(1) {
+  animation-delay: 0.2s;
+}
+.credits-holo__design .frame.is-entering .rpt__next > *:nth-child(2),
+.credits-holo__design .frame.is-entering .rpt__cover > *:nth-child(2) {
+  animation-delay: 0.34s;
+}
+.credits-holo__design .frame.is-entering .rpt__next > *:nth-child(3),
+.credits-holo__design .frame.is-entering .rpt__cover > *:nth-child(3) {
+  animation-delay: 0.48s;
+}
+
+/* ── 보고서 문서 ── */
+.credits-holo__design .rpt {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  text-align: left;
+  overflow: hidden;
+}
+
+.credits-holo__design .rpt--proj {
+  width: min(100%, 20rem);
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  margin: 0 auto;
+  gap: 0.4rem;
+  justify-content: flex-start;
+  overflow: hidden;
+}
+
+/* 순위·시그니처: 투영 컬럼을 넓혀 글자·행 간격 확보 */
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt--proj,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt--proj,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt--proj,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt--proj,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt--proj,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt--proj,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt--proj {
+  width: min(100%, 26rem);
+}
+
+.credits-holo__design .rpt--proj .rpt__date {
+  background: transparent;
+  border-color: rgba(92, 225, 255, 0.45);
+}
+
+/* 투영: 필드·개요 소프트 패널 (시안 themes.css) */
+.credits-holo__design .rpt--proj .rpt__field,
+.credits-holo__design .rpt--proj .rpt__next-part,
+.credits-holo__design .rpt--proj .an__chart-wrap,
+.credits-holo__design .rpt--proj .an__metrics > div {
+  background: rgba(4, 16, 26, 0.22);
+  border-color: rgba(92, 225, 255, 0.2);
+}
+
+.credits-holo__design .rpt--proj .rpt__overview,
+.credits-holo__design .rpt--proj .rpt__highlight {
+  background: linear-gradient(90deg, rgba(92, 225, 255, 0.14), transparent 88%);
+}
+
+/* 투영 순위: 여유 공간 활용해 행·글자 키움 */
+.credits-holo__design .frame[data-theme="report"] .rpt__table--rank {
+  font-size: 0.98rem;
+}
+
+.credits-holo__design .frame[data-theme="report"] .rpt__rank-line {
+  padding: 0.28rem 0.14rem;
+  grid-template-columns: 2.4rem minmax(0, 1fr) max-content;
+  gap: 0.35rem;
+}
+
+.credits-holo__design .frame[data-theme="report"] .rpt__table--rank tr.is-top .rpt__rank-line {
+  padding-top: 0.38rem;
+  padding-bottom: 0.38rem;
+}
+
+.credits-holo__design .frame[data-theme="report"] .rpt__table--rank tr.is-top .rpt__mono,
+.credits-holo__design .frame[data-theme="report"] .rpt__table--rank tr.is-top .rpt__rank-name,
+.credits-holo__design .frame[data-theme="report"] .rpt__table--rank tr.is-top .is-num {
+  font-size: 1.18rem;
+}
+
+.credits-holo__design .frame[data-theme="report"] .rpt__more {
+  margin-top: 0.2rem;
+  font-size: 0.72rem;
+}
+
+.credits-holo__design .rpt__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.credits-holo__design .rpt__meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  color: var(--holo);
+  opacity: 0.95;
+}
+
+.credits-holo__design .rpt__org {
+  font-weight: 800;
+}
+
+.credits-holo__design .rpt__doc {
+  opacity: 0.85;
+}
+
+.credits-holo__design .rpt__title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.credits-holo__design .rpt__code {
+  margin: 0;
+  font-size: 0.64rem;
+  letter-spacing: 0.1em;
+  color: #9ad8ea;
+}
+
+.credits-holo__design .rpt__title {
+  margin: 0.12rem 0 0;
+  font-size: 1.18rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.credits-holo__design .rpt__date {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--holo);
+  border: 1px solid rgba(92, 225, 255, 0.35);
+  padding: 0.22rem 0.4rem;
+  background: rgba(8, 30, 42, 0.45);
+}
+
+.credits-holo__design .rpt__rule {
+  height: 1px;
+  flex-shrink: 0;
+  background: linear-gradient(
+    90deg,
+    rgba(92, 225, 255, 0.55),
+    rgba(92, 225, 255, 0.12) 70%,
+    transparent
+  );
+}
+
+.credits-holo__design .rpt__sec {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 0 0 auto;
+  min-height: 0;
+}
+
+/* 표가 긴 페이지만 스크롤 — 시안 themes.css와 동일 */
+.credits-holo__design .frame[data-theme="reportProj"][data-page="signature"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__sec {
+  flex: 1 1 auto;
+  overflow: hidden;
+  scrollbar-width: none;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="signature"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__sec::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="chat"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="donation"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="watch"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="quickview"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="mission"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="timeline"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="timeline"] .rpt__sec {
+  flex: 1 1 auto;
+  overflow: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="chat"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="donation"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="watch"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="quickview"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="mission"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="timeline"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt__sec::-webkit-scrollbar,
+.credits-holo__design .frame[data-theme="report"][data-page="timeline"] .rpt__sec::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.credits-holo__design .rpt__sec-label {
+  margin: 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--holo);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.credits-holo__design .rpt__sec-label::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  background: var(--holo);
+  box-shadow: 0 0 8px rgba(92, 225, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.credits-holo__design .rpt__next {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.credits-holo__design .rpt--cover {
+  justify-content: flex-start;
+}
+
+.credits-holo__design .rpt__cover {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  flex: 1 1 auto;
+  gap: 0.7rem;
+  min-height: 0;
+  padding: 0.35rem 0 1.4rem;
+}
+
+.credits-holo__design .rpt__cover .t-proj__brand {
+  font-size: 0.72rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  opacity: 0.95;
+}
+
+.credits-holo__design .rpt__cover .t-proj__sub {
+  margin-top: 0.15rem;
+  font-size: 0.86rem;
+  letter-spacing: 0.04em;
+}
+
+.credits-holo__design .rpt__foot {
+  margin-top: auto;
+  padding-top: 0.25rem;
+  font-size: 0.58rem;
+  letter-spacing: 0.12em;
+  color: #7eb8c8;
+  opacity: 0.75;
+  border-top: 1px dashed rgba(92, 225, 255, 0.22);
+}
+
+.credits-holo__design .t-proj__brand {
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  color: var(--holo);
+}
+
+.credits-holo__design .t-proj__hero {
+  margin: 0;
+  font-size: 3.1rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #fff;
+  line-height: 1;
+}
+
+.credits-holo__design .t-proj__hero--sm {
+  font-size: 2.2rem;
+}
+
+.credits-holo__design .t-proj__hero--cover {
+  font-size: clamp(1.85rem, 4.2vw, 2.55rem);
+  line-height: 1.18;
+  letter-spacing: -0.025em;
+  max-width: 11.5em;
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+.credits-holo__design .t-proj__sub {
+  font-size: 0.82rem;
+  color: var(--holo);
+  margin-top: 0.25rem;
+}
+
+/* 시안과 동일한 본문 블록 */
+.credits-holo__design .rpt__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  flex: 0 0 auto;
+}
+
+.credits-holo__design .rpt__snap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.credits-holo__design .rpt__fields {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+  align-content: start;
+}
+
+.credits-holo__design .rpt__field {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.12rem;
+  padding: 0.45rem 0.5rem;
+  border: 1px solid rgba(92, 225, 255, 0.18);
+  background: rgba(4, 16, 26, 0.35);
+  min-height: 0;
+}
+
+.credits-holo__design .rpt__field dt {
+  margin: 0;
+  font-size: 0.66rem;
+  color: #b7dce8;
+  line-height: 1.2;
+}
+
+.credits-holo__design .rpt__field dd {
+  margin: 0;
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #7ff0ff;
+  line-height: 1.15;
+}
+
+.credits-holo__design .rpt__overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  padding: 0.55rem 0.6rem;
+  border-left: 2px solid var(--holo);
+  background: linear-gradient(90deg, rgba(92, 225, 255, 0.14), transparent 88%);
+}
+
+.credits-holo__design .rpt__overview-kicker {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--holo);
+}
+
+.credits-holo__design .rpt__overview strong {
+  font-size: 1.2rem;
+  color: #fff;
+  letter-spacing: -0.02em;
+}
+
+.credits-holo__design .rpt__overview-time {
+  font-size: 0.78rem;
+  color: #9ad8ea;
+}
+
+.credits-holo__design .rpt__overview-dur {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #7ff0ff;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.credits-holo__design .rpt__overview p {
+  margin: 0.2rem 0 0;
+  font-size: 0.84rem;
+  color: #d8f0f8;
+  line-height: 1.4;
+}
+
+.credits-holo__design .rpt__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.credits-holo__design .rpt__table th,
+.credits-holo__design .rpt__table td {
+  padding: 0.28rem 0.2rem;
+  border-bottom: 1px solid rgba(92, 225, 255, 0.14);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.credits-holo__design .rpt__table th {
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--holo);
+  opacity: 0.9;
+}
+
+.credits-holo__design .rpt__table td {
+  color: #fff;
+  font-weight: 600;
+}
+
+.credits-holo__design .rpt__table .is-num {
+  text-align: right;
+  color: #7ff0ff;
+  font-weight: 800;
+}
+
+.credits-holo__design .rpt__mono {
+  color: var(--holo);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 타임라인 — 시안 t-tl 과 같이 시각 열 고정 */
+.credits-holo__design .rpt__table--tl {
+  table-layout: fixed;
+}
+
+.credits-holo__design .rpt__table--tl th:nth-child(1),
+.credits-holo__design .rpt__table--tl td:nth-child(1) {
+  width: 3.4rem;
+  white-space: nowrap;
+}
+
+.credits-holo__design .rpt__table--tl td:nth-child(1) {
+  color: var(--holo);
+  font-size: 0.88rem;
+}
+
+.credits-holo__design .rpt__table--tl td:nth-child(2) {
+  font-size: 0.95rem;
+}
+
+/* 순위: 수치 비례 바 (td 안 absolute — tr 배경은 브라우저에서 무시됨) */
+.credits-holo__design .rpt__table--rank td.rpt__rank-cell {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+.credits-holo__design .rpt__rank-bar {
+  position: absolute;
+  left: 0;
+  top: 0.06rem;
+  bottom: 0.06rem;
+  width: 0;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    rgba(92, 225, 255, 0.2),
+    rgba(92, 225, 255, 0.07) 55%,
+    rgba(92, 225, 255, 0.02) 85%,
+    transparent
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.credits-holo__design .rpt__table--rank tr.is-top .rpt__rank-bar {
+  background: linear-gradient(
+    90deg,
+    rgba(92, 225, 255, 0.32),
+    rgba(92, 225, 255, 0.12) 55%,
+    rgba(92, 225, 255, 0.03) 85%,
+    transparent
+  );
+}
+
+.credits-holo__design .rpt__table--rank {
+  font-size: 0.95rem;
+}
+
+.credits-holo__design .rpt__table--rank th {
+  padding: 0.28rem 0.16rem;
+  font-size: 0.78rem;
+}
+
+.credits-holo__design .rpt__table--rank th.is-num {
+  white-space: nowrap;
+}
+
+.credits-holo__design .rpt__rank-line {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr) max-content;
+  align-items: center;
+  gap: 0.32rem;
+  padding: 0.26rem 0.14rem;
+}
+
+.credits-holo__design .rpt__table--rank tr.is-top .rpt__rank-line {
+  padding-top: 0.36rem;
+  padding-bottom: 0.36rem;
+}
+
+.credits-holo__design .rpt__rank-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.credits-holo__design .rpt__table--rank .is-num {
+  white-space: nowrap;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.credits-holo__design .rpt__table tr.is-top td {
+  background: linear-gradient(90deg, rgba(92, 225, 255, 0.14), transparent 88%);
+  padding-top: 0.42rem;
+  padding-bottom: 0.42rem;
+}
+
+.credits-holo__design .rpt__table--rank tr.is-top td {
+  background: transparent;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.credits-holo__design .rpt__table:not(.rpt__table--rank) tr.is-top .rpt__mono {
+  font-size: 1.02rem;
+  font-weight: 800;
+}
+
+.credits-holo__design .rpt__table:not(.rpt__table--sig):not(.rpt__table--rank) tr.is-top td:nth-child(2) {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.credits-holo__design .rpt__table--rank tr.is-top .rpt__mono,
+.credits-holo__design .rpt__table--rank tr.is-top .rpt__rank-name,
+.credits-holo__design .rpt__table--rank tr.is-top .is-num {
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.credits-holo__design .rpt__table:not(.rpt__table--rank) tr.is-top .is-num {
+  font-size: 1.05rem;
+}
+
+.credits-holo__design .rpt__table--sig {
+  table-layout: fixed;
+}
+
+.credits-holo__design .rpt__table--sig th:nth-child(1),
+.credits-holo__design .rpt__table--sig td:nth-child(1) {
+  width: 2.2rem;
+}
+
+.credits-holo__design .rpt__table--sig th:nth-child(3),
+.credits-holo__design .rpt__table--sig td:nth-child(3) {
+  width: 2.9rem;
+}
+
+.credits-holo__design .rpt__table--sig td {
+  padding-top: 0.16rem;
+  padding-bottom: 0.16rem;
+  vertical-align: middle;
+}
+
+.credits-holo__design .rpt__table--sig .sig-balloon {
+  width: 2.85rem;
+}
+
+.credits-holo__design .rpt__table--sig tr.is-top td {
+  padding-top: 0.38rem;
+  padding-bottom: 0.38rem;
+  background: linear-gradient(90deg, rgba(92, 225, 255, 0.16), transparent 90%);
+}
+
+.credits-holo__design .rpt__table--sig tr.is-top .rpt__mono {
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+
+.credits-holo__design .rpt__table--sig tr.is-top .is-num {
+  font-size: 1.05rem;
+}
+
+.credits-holo__design .rpt__table--sig tr.is-top .sig-balloon {
+  width: 4rem;
+}
+
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__table--sig .sig-balloon {
+  width: 3rem;
+}
+
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__table--sig tr.is-top .sig-balloon {
+  width: 4.15rem;
+}
+
+.credits-holo__design .rpt__table--sig tr.is-top .rpt__sig b {
+  font-size: 1.05rem;
+}
+
+.credits-holo__design .rpt__table--sig tr.is-top .rpt__sig em {
+  font-size: 0.74rem;
+}
+
+.credits-holo__design .rpt__sig {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.credits-holo__design .sig-balloon {
+  flex: 0 0 auto;
+  width: 2.85rem;
+  line-height: 0;
+  overflow: visible;
+  filter: drop-shadow(0 0 10px rgba(92, 225, 255, 0.5));
+}
+
+.credits-holo__design .sig-balloon img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  transform: translateY(-20%);
+}
+
+.credits-holo__design .rpt__table--emo .sig-balloon--emo {
+  width: 2.35rem;
+  filter: none;
+}
+
+.credits-holo__design .rpt__table--emo .sig-balloon--emo img {
+  transform: none;
+}
+
+.credits-holo__design .rpt__emo-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem 0.4rem;
+}
+
+.credits-holo__design .rpt__emo-card {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: 0.28rem 0.35rem;
+  min-width: 0;
+  padding: 0.28rem 0.35rem;
+  border: 1px solid rgba(92, 225, 255, 0.16);
+  background: rgba(4, 18, 36, 0.35);
+  border-radius: 0.2rem;
+}
+
+.credits-holo__design .rpt__emo-card.is-top {
+  border-color: rgba(92, 225, 255, 0.45);
+  background: linear-gradient(135deg, rgba(92, 225, 255, 0.14), rgba(4, 18, 36, 0.2));
+}
+
+.credits-holo__design .rpt__emo-rank {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: rgba(200, 232, 244, 0.75);
+}
+
+.credits-holo__design .rpt__emo-card.is-top .rpt__emo-rank {
+  color: var(--holo, #5ce1ff);
+}
+
+.credits-holo__design .rpt__emo-art {
+  width: 1.85rem;
+  height: 1.85rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.credits-holo__design .rpt__emo-art img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  transform: none !important;
+  filter: none;
+}
+
+.credits-holo__design .rpt__emo-ph {
+  font-size: 0.85rem;
+  color: rgba(92, 225, 255, 0.45);
+}
+
+.credits-holo__design .rpt__emo-meta {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  line-height: 1.15;
+}
+
+.credits-holo__design .rpt__emo-meta b {
+  display: none;
+}
+
+.credits-holo__design .rpt__emo-meta em {
+  font-style: normal;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  color: rgba(200, 232, 244, 0.72);
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__sec {
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__sec:last-of-type,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__sec:last-of-type {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__table--emo-users td,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__table--emo-users td {
+  padding-top: 0.12rem;
+  padding-bottom: 0.12rem;
+}
+
+.credits-holo__design .rpt__sig > span:not(.sig-balloon) {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.06rem;
+  min-width: 0;
+  line-height: 1.15;
+}
+
+.credits-holo__design .rpt__sig b {
+  font-size: 0.86rem;
+  color: #fff;
+}
+
+.credits-holo__design .rpt__sig em {
+  font-style: normal;
+  font-size: 0.64rem;
+  color: #c8e8f4;
+  opacity: 0.9;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 시그니처·순위: 헤더·푸터 압축 (시안 themes.css) */
+.credits-holo__design .frame[data-theme="reportProj"][data-page="signature"] .rpt__head,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="chat"] .rpt__head,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__head,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="donation"] .rpt__head,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="watch"] .rpt__head,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="quickview"] .rpt__head,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="mission"] .rpt__head,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__head,
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt__head,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__head,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt__head,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt__head,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt__head,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt__head {
+  gap: 0.2rem;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="signature"] .rpt__title,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="chat"] .rpt__title,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__title,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="donation"] .rpt__title,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="watch"] .rpt__title,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="quickview"] .rpt__title,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="mission"] .rpt__title,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__title,
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt__title,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__title,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt__title,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt__title,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt__title,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt__title {
+  font-size: 1.05rem;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="signature"] .rpt__meta,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="chat"] .rpt__meta,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__meta,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="donation"] .rpt__meta,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="watch"] .rpt__meta,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="quickview"] .rpt__meta,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="mission"] .rpt__meta,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__meta,
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt__meta,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__meta,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt__meta,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt__meta,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt__meta,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt__meta {
+  font-size: 0.58rem;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="signature"] .rpt__foot,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="chat"] .rpt__foot,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__foot,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="donation"] .rpt__foot,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="watch"] .rpt__foot,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="quickview"] .rpt__foot,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="mission"] .rpt__foot,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__foot,
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt__foot,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__foot,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt__foot,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt__foot,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt__foot,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt__foot {
+  display: none;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="signature"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="chat"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="donation"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="watch"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="quickview"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="mission"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt__sec-label,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt__sec-label {
+  font-size: 0.6rem;
+}
+
+.credits-holo__design .frame[data-theme="reportProj"][data-page="signature"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="chat"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="emoticon"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="donation"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="watch"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="quickview"] .rpt__sec,
+.credits-holo__design .frame[data-theme="reportProj"][data-page="mission"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="signature"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="chat"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="emoticon"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="donation"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="watch"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="quickview"] .rpt__sec,
+.credits-holo__design .frame[data-theme="report"][data-page="mission"] .rpt__sec {
+  padding-bottom: 0.35rem;
+}
+
+.credits-holo__design .rpt__next-date {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #7ff0ff;
+}
+
+.credits-holo__design .rpt__next-part {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid rgba(92, 225, 255, 0.2);
+  background: rgba(4, 16, 26, 0.35);
+}
+
+.credits-holo__design .rpt__next-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-bottom: 0.15rem;
+}
+
+.credits-holo__design .rpt__next-head b {
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.credits-holo__design .rpt__next-head span {
+  color: var(--holo);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.credits-holo__design .rpt__next-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+}
+
+.credits-holo__design .rpt__next-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.55rem;
+  padding: 0.34rem 0.42rem;
+  border-radius: 8px;
+  border: 1px solid rgba(92, 225, 255, 0.14);
+  background: rgba(2, 10, 18, 0.42);
+}
+
+.credits-holo__design .rpt__next-item-text {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: #d8f0f8;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+
+.credits-holo__design .rpt__next-item-time {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--holo);
+  font-family: var(--holo-mono, ui-monospace, monospace);
+}
+
+.credits-holo__design .rpt__next-empty,
+.credits-holo__design .rpt__next-part p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #d8f0f8;
+}
+
+.credits-holo__design .rpt__more {
+  margin: 0.18rem 0 0;
+  font-size: 0.64rem;
+  color: #9ad8ea;
+  flex-shrink: 0;
+}
+
+.credits-holo__design .holo-designer-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+.credits-holo__design .holo-designer-list li {
+  padding: 0.2rem 0;
+  border-bottom: 1px solid rgba(92, 225, 255, 0.14);
+}
+
+.credits-holo__design .hl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.credits-holo__design .hl__shot {
+  position: relative;
+  border: 1px solid rgba(92, 225, 255, 0.28);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(0, 10, 22, 0.45);
+}
+
+.credits-holo__design .hl__shot img,
+.credits-holo__design .hl__ph {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+}
+
+.credits-holo__design .hl__ph {
+  display: grid;
+  place-items: center;
+  color: #7eb8c8;
+  font-size: 0.75rem;
+}
+
+.credits-holo__design .hl__badge {
+  position: absolute;
+  left: 0.4rem;
+  bottom: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  padding: 0.3rem 0.45rem;
+  background: rgba(4, 16, 26, 0.72);
+  border: 1px solid rgba(92, 225, 255, 0.35);
+}
+
+.credits-holo__design .hl__badge em {
+  font-style: normal;
+  font-size: 0.58rem;
+  letter-spacing: 0.1em;
+  color: var(--holo);
+}
+
+.credits-holo__design .hl__badge b {
+  font-size: 0.95rem;
+  color: #7ff0ff;
+}
+
+.credits-holo__design .hl__cap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.credits-holo__design .hl__time {
+  font-size: 0.72rem;
+  color: var(--holo);
+  font-weight: 700;
+}
+
+.credits-holo__design .hl__cap strong {
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.credits-holo__design .hl__cap em {
+  font-style: normal;
+  font-size: 0.7rem;
+  color: #9ad8ea;
+}
+
+/* ── 방송 분석 (시안 themes.css) ── */
+.credits-holo__design .an {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  text-align: left;
+}
+
+.credits-holo__design .an__chart-wrap {
+  padding: 0.4rem 0.45rem 0.3rem;
+  border: 1px solid rgba(92, 225, 255, 0.22);
+  background: rgba(4, 16, 26, 0.4);
+}
+
+.credits-holo__design .an__chart-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  color: #9ad8ea;
+  margin-bottom: 0.25rem;
+}
+
+.credits-holo__design .an__chart {
+  width: 100%;
+  height: 5.2rem;
+  display: block;
+}
+
+.credits-holo__design .an__area {
+  fill: rgba(92, 225, 255, 0.16);
+  stroke: none;
+}
+
+.credits-holo__design .an__line {
+  stroke: #7ff0ff;
+  stroke-width: 1.8;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.credits-holo__design .an__peak {
+  fill: #fff;
+  stroke: #5ce1ff;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 4px rgba(92, 225, 255, 0.8));
+}
+
+.credits-holo__design .an__metrics {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+}
+
+.credits-holo__design .an__metrics > div {
+  padding: 0.32rem 0.4rem;
+  border: 1px solid rgba(92, 225, 255, 0.18);
+  background: rgba(4, 16, 26, 0.35);
+}
+
+.credits-holo__design .an__metrics dt {
+  margin: 0;
+  font-size: 0.64rem;
+  color: #b7dce8;
+}
+
+.credits-holo__design .an__metrics dd {
+  margin: 0.1rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #7ff0ff;
+}
+
+.credits-holo__design .rpt__stat-img {
+  width: 3.5rem;
+  height: 3.5rem;
+  object-fit: contain;
+  margin-top: 0.35rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .credits-holo__design .frame[data-theme="reportProj"],
+  .credits-holo__design .frame[data-theme="reportProj"]::after,
+  .credits-holo__design .frame[data-theme="report"]::after,
+  .credits-holo__design .holo-rise::before,
+  .credits-holo__design .holo-rise::after,
+  .credits-holo__design .scan,
+  .credits-holo__design .holo-glitch,
+  .credits-holo__design .holo-glitch::before,
+  .credits-holo__design .holo-glitch::after,
+  .credits-holo__design .frame.is-entering,
+  .credits-holo__design .frame.is-entering .panel,
+  .credits-holo__design .frame.is-entering .rpt__head,
+  .credits-holo__design .frame.is-entering .rpt__rule,
+  .credits-holo__design .frame.is-entering .rpt__sec,
+  .credits-holo__design .frame.is-entering .rpt__table tbody tr,
+  .credits-holo__design .frame.is-entering .rpt__foot {
+    animation: none !important;
+  }
+}
