@@ -3936,7 +3936,165 @@ def raw_jsonl_paths_for_broadcast(
                 continue
             seen.add(key)
             out.append(path)
+        orphan = _station_orphan_raw_path(day_dir, sid)
+        if orphan.is_file():
+            key = str(orphan.resolve())
+            if key not in seen:
+                seen.add(key)
+                out.append(orphan)
     return out
+
+
+def _station_orphan_raw_path(day_dir: Path, station_id: str) -> Path:
+    safe = re.sub(r"[^\w.\-]+", "_", str(station_id or "").strip()) or "unknown"
+    return day_dir / f"orphan_{safe}.jsonl"
+
+
+def _raw_event_matches_broadcast(
+    row: dict[str, Any],
+    station_id: str,
+    broad_no: str,
+) -> bool:
+    sid = str(station_id or "").strip().lower()
+    want_broad = str(broad_no or "").strip()
+    if not isinstance(row, dict):
+        return False
+    row_sid = str(row.get("stationId") or "").strip().lower()
+    if sid and row_sid and row_sid != sid:
+        return False
+    row_broad = str(row.get("broadNo") or "").strip()
+    if want_broad and row_broad and row_broad != want_broad:
+        return False
+    return True
+
+
+def iter_broadcast_raw_events(
+    session: dict[str, Any] | None,
+    *,
+    raw_dir: Path,
+) -> list[dict[str, Any]]:
+    """같은 방송 raw 이벤트 — 분리·orphan 파일 포함, broadNo로 필터."""
+    if not isinstance(session, dict):
+        return []
+    sid = str(session.get("stationId") or "").strip()
+    broad = str(session.get("broadNo") or "").strip()
+    rows: list[dict[str, Any]] = []
+    for path in raw_jsonl_paths_for_broadcast(session, raw_dir):
+        for row in iter_raw_jsonl_events(path):
+            if _raw_event_matches_broadcast(row, sid, broad):
+                rows.append(row)
+    return rows
+
+
+def chatters_from_broadcast_raw(
+    session: dict[str, Any] | None,
+    *,
+    raw_dir: Path,
+) -> dict[str, dict[str, Any]]:
+    """분리된 raw JSONL 전체에서 chatter 집계 (모니터 미리보기 전용)."""
+    if not isinstance(session, dict):
+        return {}
+    bj_id = normalize_soop_user_id(str(session.get("stationId") or "").strip())
+    chatters: dict[str, dict[str, Any]] = {}
+    for row in iter_broadcast_raw_events(session, raw_dir=raw_dir):
+        if str(row.get("status") or "").strip().lower() != "accepted":
+            continue
+        action = str(row.get("action") or "").strip().upper()
+        if action not in CHAT_ACTIONS:
+            continue
+        msg = row.get("message") if isinstance(row.get("message"), dict) else {}
+        uid = normalize_soop_user_id(_msg_field(msg, "userId", "user_id", "id"))
+        if not uid or (bj_id and uid == bj_id):
+            continue
+        name = _msg_field(msg, "nickname", "userNickname", "name") or uid
+        at_raw = str(row.get("at") or msg.get("at") or "").strip()
+        ts_ms = 0.0
+        parsed = parse_iso(at_raw)
+        if parsed:
+            ts_ms = parsed.timestamp() * 1000
+        prev = chatters.get(uid) or {
+            "name": name,
+            "count": 0,
+            "joinedAt": ts_ms or 0,
+            "leftAt": 0,
+            "lastSeenAt": ts_ms or 0,
+            "watchedMs": 0,
+        }
+        prev["name"] = name or prev.get("name") or uid
+        prev["count"] = int(prev.get("count") or 0) + 1
+        if ts_ms:
+            if not prev.get("joinedAt"):
+                prev["joinedAt"] = ts_ms
+            prev["lastSeenAt"] = max(float(prev.get("lastSeenAt") or 0), ts_ms)
+        chatters[uid] = prev
+    return chatters
+
+
+def list_session_fragments_for_monitor(
+    store: "CreditsStore",
+    station_id: str,
+    *,
+    broad_no: str = "",
+) -> list[dict[str, Any]]:
+    """같은 broadNo의 분리 세션 조각 — 모니터 병합용 (디스크 변경 없음)."""
+    sid = store._norm_station_id(station_id)
+    want_broad = str(broad_no or "").strip()
+    if not sid:
+        return []
+
+    seen: set[str] = set()
+    fragments: list[dict[str, Any]] = []
+
+    def consider(sess: dict[str, Any] | None) -> None:
+        if not isinstance(sess, dict):
+            return
+        if not sess.get("startedAt") and session_data_score(sess) <= 0:
+            return
+        b = str(sess.get("broadNo") or "").strip()
+        if want_broad and b and b != want_broad:
+            return
+        key = f"{sess.get('startedAt')}|{b}|{session_data_score(sess)}"
+        if key in seen:
+            return
+        seen.add(key)
+        fragments.append(sess)
+
+    consider(store.load_session_for(sid))
+    active = store.load_session()
+    if store._norm_station_id(active.get("stationId")) == sid:
+        consider(active)
+
+    try:
+        day_dirs = sorted(
+            [p for p in store.backup_dir.iterdir() if p.is_dir()],
+            key=lambda p: p.name,
+            reverse=True,
+        )[:2]
+    except OSError:
+        day_dirs = []
+    for day_dir in day_dirs:
+        try:
+            files = sorted(
+                [p for p in day_dir.glob("*.json") if p.is_file()],
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )[:80]
+        except OSError:
+            continue
+        for path in files:
+            try:
+                packed = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(packed, dict):
+                continue
+            sess = packed.get("session") if isinstance(packed.get("session"), dict) else None
+            if not sess:
+                continue
+            consider(store._hydrate_session(dict(sess), fallback_station=sid))
+
+    fragments.sort(key=lambda s: str(s.get("startedAt") or ""))
+    return fragments
 
 
 def earliest_raw_event_at(
@@ -3948,13 +4106,12 @@ def earliest_raw_event_at(
     if not isinstance(session, dict):
         return None
     earliest: datetime | None = None
-    for path in raw_jsonl_paths_for_broadcast(session, raw_dir):
-        for row in iter_raw_jsonl_events(path):
-            if str(row.get("status") or "").strip().lower() != "accepted":
-                continue
-            at = parse_iso(row.get("at")) or parse_iso(row.get("sessionStartedAt"))
-            if at and (earliest is None or at < earliest):
-                earliest = at
+    for row in iter_broadcast_raw_events(session, raw_dir=raw_dir):
+        if str(row.get("status") or "").strip().lower() != "accepted":
+            continue
+        at = parse_iso(row.get("at")) or parse_iso(row.get("sessionStartedAt"))
+        if at and (earliest is None or at < earliest):
+            earliest = at
     if earliest is None:
         return None
     return _iso_z(earliest)
@@ -4025,13 +4182,21 @@ def enrich_session_for_monitor_preview(
                 out = dict(active)
             broad = str(out.get("broadNo") or broad or "").strip()
 
-    recovered = store._find_recoverable_session(sid, broad_no=broad)
-    if isinstance(recovered, dict) and (
-        recovered.get("startedAt") or session_data_score(recovered) > 0
-    ):
-        rec_broad = str(recovered.get("broadNo") or "").strip()
-        if not broad or not rec_broad or rec_broad == broad:
-            merge_prior_session_into(out, recovered)
+    fragments = list_session_fragments_for_monitor(store, sid, broad_no=broad)
+    out_start_dt = parse_iso(out.get("startedAt"))
+    for prior in sorted(fragments, key=lambda s: str(s.get("startedAt") or "")):
+        ps = parse_iso(prior.get("startedAt"))
+        if not ps:
+            continue
+        if out_start_dt and ps >= out_start_dt:
+            continue
+        merge_prior_session_into(out, prior)
+
+    raw_paths = raw_jsonl_paths_for_broadcast(out, raw_dir=raw_dir)
+    if len(raw_paths) >= 2 or any("orphan_" in p.name for p in raw_paths):
+        raw_chatters = chatters_from_broadcast_raw(out, raw_dir=raw_dir)
+        if session_chat_count({"chatters": raw_chatters}) >= session_chat_count(out):
+            out["chatters"] = raw_chatters
 
     earliest = earliest_raw_event_at(out, raw_dir=raw_dir)
     if earliest:
@@ -4145,9 +4310,7 @@ def build_chat_metrics_series_from_broadcast_raw(
     paths = raw_jsonl_paths_for_broadcast(session, raw_dir)
     if not paths:
         return build_chat_metrics_series_from_session_raw(session, raw_dir=raw_dir)
-    rows: list[dict[str, Any]] = []
-    for path in paths:
-        rows.extend(iter_raw_jsonl_events(path))
+    rows = iter_broadcast_raw_events(session, raw_dir=raw_dir)
     return build_chat_metrics_series_from_raw_rows(rows)
 
 

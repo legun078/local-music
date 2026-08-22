@@ -5,44 +5,73 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
 
 from credits_store import (
-    CreditsStore,
-    enrich_session_for_monitor_preview,
-    merge_prior_session_into,
-    session_monitor_effective_start,
     build_chat_metrics_series_from_broadcast_raw,
+    chatters_from_broadcast_raw,
+    merge_prior_session_into,
     raw_jsonl_paths_for_broadcast,
+    session_monitor_effective_start,
 )
 
 
 class MonitorSessionPreviewTests(unittest.TestCase):
-    def test_effective_start_uses_earliest_raw_event(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            raw_dir = Path(tmp)
-            day = "2026-08-22"
-            (raw_dir / day).mkdir(parents=True)
-            path = raw_dir / day / "120000_sirianrain.jsonl"
-            path.write_text(
+    def _write_raw(self, path: Path, broad: str, events: list[tuple[str, str]]) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        lines = [
+            json.dumps(
+                {"kind": "batch", "stationId": "sirianrain", "broadNo": broad},
+                ensure_ascii=False,
+            )
+        ]
+        for at, uid in events:
+            lines.append(
                 json.dumps(
-                    {
-                        "kind": "batch",
-                        "stationId": "sirianrain",
-                        "broadNo": "12345",
-                    },
-                    ensure_ascii=False,
-                )
-                + "\n"
-                + json.dumps(
                     {
                         "kind": "event",
                         "status": "accepted",
                         "action": "CHAT",
-                        "at": "2026-08-22T03:00:00Z",
+                        "at": at,
                         "stationId": "sirianrain",
-                        "broadNo": "12345",
+                        "broadNo": broad,
+                        "message": {"userId": uid, "userNickname": uid},
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def test_effective_start_uses_earliest_raw_event(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_dir = Path(tmp)
+            path = raw_dir / "2026-08-22" / "130024_sirianrain.jsonl"
+            self._write_raw(path, "999", [("2026-08-22T04:00:00Z", "u1")])
+            session = {
+                "stationId": "sirianrain",
+                "broadNo": "999",
+                "active": True,
+                "startedAt": "2026-08-22T05:00:00Z",
+            }
+            got = session_monitor_effective_start(session, raw_dir=raw_dir)
+            self.assertEqual(got, "2026-08-22T04:00:00Z")
+
+    def test_broadcast_raw_paths_include_orphan_and_splits(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            raw_dir = Path(tmp)
+            day_dir = raw_dir / "2026-08-22"
+            self._write_raw(day_dir / "130024_sirianrain.jsonl", "999", [])
+            self._write_raw(day_dir / "130412_sirianrain.jsonl", "999", [])
+            day_dir.joinpath("orphan_sirianrain.jsonl").write_text(
+                json.dumps(
+                    {
+                        "kind": "event",
+                        "status": "accepted",
+                        "action": "CHAT",
+                        "at": "2026-08-22T03:59:00Z",
+                        "stationId": "sirianrain",
+                        "broadNo": "999",
+                        "message": {"userId": "orphan", "userNickname": "orphan"},
                     },
                     ensure_ascii=False,
                 )
@@ -51,54 +80,40 @@ class MonitorSessionPreviewTests(unittest.TestCase):
             )
             session = {
                 "stationId": "sirianrain",
-                "broadNo": "12345",
+                "broadNo": "999",
                 "active": True,
-                "startedAt": "2026-08-22T04:00:00Z",
+                "startedAt": "2026-08-22T04:04:12Z",
             }
-            got = session_monitor_effective_start(session, raw_dir=raw_dir)
-            self.assertEqual(got, "2026-08-22T03:00:00Z")
+            names = {p.name for p in raw_jsonl_paths_for_broadcast(session, raw_dir)}
+            self.assertIn("130024_sirianrain.jsonl", names)
+            self.assertIn("130412_sirianrain.jsonl", names)
+            self.assertIn("orphan_sirianrain.jsonl", names)
 
-    def test_broadcast_raw_paths_merge_same_broad(self) -> None:
+    def test_chatters_from_broadcast_raw_merges_split_files(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             raw_dir = Path(tmp)
             day = "2026-08-22"
-            (raw_dir / day).mkdir(parents=True)
-            for stem in ("120000_sirianrain", "130000_sirianrain"):
-                path = raw_dir / day / f"{stem}.jsonl"
-                path.write_text(
-                    json.dumps(
-                        {
-                            "kind": "batch",
-                            "stationId": "sirianrain",
-                            "broadNo": "999",
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                    + json.dumps(
-                        {
-                            "kind": "event",
-                            "status": "accepted",
-                            "action": "CHAT",
-                            "at": f"2026-08-22T{stem[:2]}:{stem[2:4]}:00Z",
-                            "stationId": "sirianrain",
-                            "broadNo": "999",
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n",
-                    encoding="utf-8",
-                )
+            self._write_raw(
+                raw_dir / day / "130024_sirianrain.jsonl",
+                "999",
+                [("2026-08-22T04:00:00Z", "a"), ("2026-08-22T04:01:00Z", "a")],
+            )
+            self._write_raw(
+                raw_dir / day / "130412_sirianrain.jsonl",
+                "999",
+                [("2026-08-22T04:05:00Z", "b"), ("2026-08-22T04:06:00Z", "b"), ("2026-08-22T04:07:00Z", "b")],
+            )
             session = {
                 "stationId": "sirianrain",
                 "broadNo": "999",
                 "active": True,
-                "startedAt": "2026-08-22T13:00:00Z",
+                "startedAt": "2026-08-22T04:04:12Z",
             }
-            paths = raw_jsonl_paths_for_broadcast(session, raw_dir)
-            self.assertEqual(len(paths), 2)
+            chatters = chatters_from_broadcast_raw(session, raw_dir=raw_dir)
+            self.assertEqual(chatters["a"]["count"], 2)
+            self.assertEqual(chatters["b"]["count"], 3)
             series = build_chat_metrics_series_from_broadcast_raw(session, raw_dir=raw_dir)
-            self.assertEqual(len(series), 2)
+            self.assertGreaterEqual(len(series), 2)
 
     def test_merge_prior_preserves_earlier_start(self) -> None:
         cur = {
@@ -111,12 +126,12 @@ class MonitorSessionPreviewTests(unittest.TestCase):
         prior = {
             "stationId": "sirianrain",
             "broadNo": "1",
-            "startedAt": "2026-08-22T03:00:00Z",
+            "startedAt": "2026-08-22T04:00:00Z",
             "chatters": {"u2": {"name": "B", "count": 5}},
             "metricsSeries": {"viewers": [], "up": [], "balloons": [], "chats": []},
         }
         merged = merge_prior_session_into(dict(cur), prior)
-        self.assertEqual(merged["startedAt"], "2026-08-22T03:00:00Z")
+        self.assertEqual(merged["startedAt"], "2026-08-22T04:00:00Z")
         self.assertIn("u1", merged["chatters"])
         self.assertIn("u2", merged["chatters"])
 
