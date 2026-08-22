@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <meta name="theme-color" content="#F4F7FB" />
+  <title>라이브 데이터</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/fonts-archive/NanumGothic/NanumGothic.css" />
+  <script>
+    window.CREDITS_BASE = (function () {
+      const p = location.pathname;
+      if (p === "/ending" || p.startsWith("/ending/")) return "/ending";
+      if (p === "/live_data" || p.startsWith("/live_data/")) return "/ending";
+      return "";
+    })();
+    window.ENDING_MONITOR_MODE = "live_data";
+    window.ENDING_CACHE_V = String(Date.now());
+    (function () {
+      try {
+        var q = new URLSearchParams(location.search);
+        if (q.get("code") || q.get("authCode")) {
+          document.documentElement.classList.add("ending-oauth-busy");
+        }
+      } catch (_) {}
+    })();
+    (function () {
+      var v = window.ENDING_CACHE_V;
+      var prefix = window.CREDITS_BASE ? window.CREDITS_BASE + "/" : "";
+      function css(href) {
+        var link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = href + "?v=" + v;
+        document.head.appendChild(link);
+      }
+      css(prefix + "css/dev-monitor.css");
+    })();
+  </script>
+</head>
+<body class="credits-collector-page ending-dev-page ending-dev-mode-sirian ending-dev-page--standalone">
+  <div class="ending-dev-shell">
+    <header class="ending-dev-bar ending-dev-bar--standalone">
+      <div class="ending-dev-bar__brand">
+        <span class="ending-dev-bar__mark" aria-hidden="true"></span>
+        <div>
+          <p class="ending-dev-bar__kicker">시리안_레인 방송</p>
+          <h1 class="ending-dev-bar__title">라이브 데이터</h1>
+        </div>
+      </div>
+      <div class="ending-dev-bar__tools">
+        <span class="ending-dev-stamp" id="dev-stamp">—</span>
+        <label class="ending-dev-auto">
+          <input type="checkbox" id="dev-auto" checked />
+          자동
+        </label>
+        <button type="button" class="ending-dev-refresh" id="btn-dev-refresh">새로고침</button>
+        <button type="button" class="ending-dev-refresh ending-dev-refresh--muted" id="btn-live-data-logout">로그아웃</button>
+      </div>
+    </header>
+
+    <section class="ending-dev-gate" id="dev-gate">
+      <h2>로그인 필요</h2>
+      <p id="dev-gate-msg">시리안 또는 허용된 계정으로 숲 로그인해 주세요.</p>
+      <button type="button" class="ending-dev-refresh ending-dev-refresh--primary" id="btn-live-data-login">
+        숲 로그인
+      </button>
+    </section>
+
+    <div id="dev-app" class="ending-dev-app" hidden>
+      <section class="ending-dev-overview" aria-label="연결 상태">
+        <section class="ending-dev-hero" id="dev-strip" aria-label="연결 상태"></section>
+      </section>
+
+      <article class="ending-dev-card ending-dev-panel is-idle" id="panel-account">
+        <header class="ending-dev-card__head">
+          <div class="ending-dev-card__identity">
+            <h2 class="ending-dev-card__title" id="acc-title">—</h2>
+            <p class="ending-dev-meta" id="acc-meta">—</p>
+          </div>
+          <div class="ending-dev-card__controls">
+            <div class="ending-dev-viewmode" id="acc-viewmode" role="tablist" aria-label="보기 모드">
+              <button type="button" class="ending-dev-viewmode__btn is-on" data-view="live" id="view-live">현재</button>
+              <button type="button" class="ending-dev-viewmode__btn" data-view="history" id="view-history">날짜별</button>
+            </div>
+          </div>
+        </header>
+
+        <p class="ending-dev-note" id="acc-note" hidden></p>
+
+        <section class="ending-dev-history" id="acc-history" hidden aria-label="날짜별 아카이브">
+          <div class="ending-dev-history__toolbar">
+            <label class="ending-dev-history__picker" for="acc-history-date">
+              <span class="ending-dev-history__picker-label">방송 날짜</span>
+              <span class="ending-dev-history__picker-field">
+                <select id="acc-history-date" class="ending-dev-history__select"></select>
+              </span>
+            </label>
+          </div>
+          <div class="ending-dev-history__list" id="acc-history-list"></div>
+        </section>
+
+        <dl class="ending-dev-stats" id="acc-stats"></dl>
+        <figure class="ending-dev-peak" id="acc-peak" hidden>
+          <div class="ending-dev-peak__media">
+            <img id="acc-peak-img" alt="최고 시청 순간 썸네일" />
+          </div>
+          <figcaption class="ending-dev-peak__cap" id="acc-peak-cap"></figcaption>
+        </figure>
+
+        <section class="ending-dev-data" aria-label="수집 데이터">
+          <div class="ending-dev-data__head">
+            <h3 class="ending-dev-sec-title">수집 데이터</h3>
+            <p class="ending-dev-data__hint" id="acc-data-hint">종합 보기</p>
+          </div>
+          <div class="ending-dev-data-body" id="acc-data-body"></div>
+        </section>
+      </article>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var base = window.CREDITS_BASE || "";
+      var prefix = base ? base + "/" : "";
+      var v = window.ENDING_CACHE_V || Date.now();
+      function loadScript(src, next) {
+        var s = document.createElement("script");
+        s.src = src + "?v=" + v;
+        s.onload = next;
+        s.onerror = next;
+        document.body.appendChild(s);
+      }
+      loadScript(prefix + "js/collect-runtime.js", function () {
+        loadScript(prefix + "js/live-data-boot.js", function () {
+          loadScript(prefix + "js/dev-monitor.js");
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
