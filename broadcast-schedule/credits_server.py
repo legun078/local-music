@@ -39,12 +39,15 @@ from credits_store import (
     build_demo_credits_payload,
     coalesce_session_user_aliases,
     collector_segments_for_monitor,
+    enrich_session_for_monitor_preview,
     format_kst_clock,
     format_watch,
     chatter_watch_ms,
     normalize_soop_user_id,
     parse_iso,
     parse_signature_amounts,
+    session_metrics_end_at,
+    session_monitor_effective_start,
     serialize_donation_notes,
     serialize_mission_runs,
     serialize_ssapi_assist,
@@ -954,11 +957,14 @@ def _metrics_series_readonly_preview(session: dict) -> dict[str, list[dict[str, 
         raw.get("viewers") if isinstance(raw.get("viewers"), list) else [],
         keep_max=True,
     )
+    started_at = session_monitor_effective_start(session, raw_dir=CREDITS_RAW_DIR) or str(
+        session.get("startedAt") or ""
+    )
     aligned_v, aligned_c = align_viewer_chat_metrics(
         viewers,
         chats,
-        started_at=str(session.get("startedAt") or ""),
-        end_at=str(session.get("updatedAt") or "") or None,
+        started_at=started_at,
+        end_at=session_metrics_end_at(session),
     )
     aligned_v = apply_peak_viewers_to_series(
         aligned_v,
@@ -977,12 +983,15 @@ def _dev_monitor_replay_context(session: dict) -> dict[str, Any]:
     vod_title_no = str(session.get("vodTitleNo") or "").strip()
     if not vod_title_no and not active and sid and broad_no:
         vod_title_no = fetch_vod_title_no_for_broad(sid, broad_no)
+    started_at = session_monitor_effective_start(session, raw_dir=CREDITS_RAW_DIR) or str(
+        session.get("startedAt") or ""
+    )
     return {
         "stationId": sid,
         "broadNo": broad_no,
         "vodTitleNo": vod_title_no,
-        "startedAt": str(session.get("startedAt") or ""),
-        "endedAt": str(session.get("endedAt") or ""),
+        "startedAt": started_at,
+        "endedAt": str(session.get("endedAt") or "") or session_metrics_end_at(session) or "",
         "active": active,
     }
 
@@ -1874,6 +1883,11 @@ def _build_dev_monitor_payload(viewer_sid: str) -> dict[str, Any]:
 
     # 시리안 = 시리안 계정 세션 파일 (다른 계정 로그인과 독립)
     sirian_session = store.load_session_for(sirian_sid)
+    sirian_session = enrich_session_for_monitor_preview(
+        sirian_session if isinstance(sirian_session, dict) else {},
+        store,
+        raw_dir=CREDITS_RAW_DIR,
+    )
     sirian_summary = _session_monitor_summary(
         sirian_session if isinstance(sirian_session, dict) else {}
     )

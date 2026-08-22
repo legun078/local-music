@@ -557,6 +557,16 @@
     return { minMs, maxMs };
   }
 
+  function chartTimeRangeWithSessionStart(pointsLists, replay) {
+    const range = chartTimeRangeFromPoints(...pointsLists);
+    if (!range) return null;
+    const startMs = parseChartDate(replay?.startedAt)?.getTime();
+    if (startMs && startMs < range.minMs) {
+      range.minMs = startMs;
+    }
+    return range;
+  }
+
   function chartDualTimeLayout(pad, w, h, minMs, maxMs, maxViewers, maxChats) {
     const xInset = CHART_X_INSET;
     const yInset = CHART_Y_INSET;
@@ -1553,7 +1563,7 @@
     }
     const h = CHART_H;
     const pad = CHART_PAD_DUAL;
-    const timeRange = chartTimeRangeFromPoints(viewers, chats);
+    const timeRange = chartTimeRangeWithSessionStart([viewers, chats], replay);
     if (!timeRange) {
       return {
         html: `<p class="ending-dev-empty ending-dev-data-empty">시계열 없음</p>`,

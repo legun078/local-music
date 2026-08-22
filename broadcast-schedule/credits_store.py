@@ -2238,6 +2238,54 @@ def format_duration(started_at: str | None, ended_at: str | None = None) -> str:
     return " ".join(parts)
 
 
+_MAX_PLAUSIBLE_SESSION_SEC = 14 * 3600
+
+
+def _latest_metric_at(session: dict[str, Any]) -> datetime | None:
+    ms = session.get("metricsSeries") if isinstance(session.get("metricsSeries"), dict) else {}
+    latest: datetime | None = None
+    for key in ("viewers", "chats", "up", "balloons"):
+        rows = ms.get(key) if isinstance(ms.get(key), list) else []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            at = parse_iso(row.get("at"))
+            if at and (latest is None or at > latest):
+                latest = at
+    return latest
+
+
+def session_metrics_end_at(session: dict[str, Any] | None) -> str | None:
+    """차트·길이 계산용 세션 종료 시각."""
+    if not isinstance(session, dict):
+        return None
+    started = parse_iso(session.get("startedAt"))
+    if not started:
+        return None
+
+    ended = parse_iso(session.get("endedAt"))
+    if ended and ended >= started:
+        return str(session.get("endedAt") or "").strip() or None
+
+    latest = _latest_metric_at(session)
+    if latest and latest >= started:
+        return _iso_z(latest)
+
+    peak_at = parse_iso(session.get("peakViewersAt"))
+    if peak_at and peak_at >= started:
+        return _iso_z(peak_at)
+
+    updated = parse_iso(session.get("updatedAt"))
+    if updated and updated >= started:
+        span = (updated - started).total_seconds()
+        if span <= _MAX_PLAUSIBLE_SESSION_SEC:
+            return str(session.get("updatedAt") or "").strip() or None
+
+    if latest and latest >= started:
+        return _iso_z(latest)
+    return None
+
+
 def format_watch(ms_or_sec: float, *, seconds_input: bool = False) -> str:
     total = int(ms_or_sec if seconds_input else ms_or_sec / 1000)
     total = max(0, total)
@@ -3814,6 +3862,191 @@ def raw_jsonl_path_for_session(session: dict[str, Any], raw_dir: Path) -> Path |
     return path if path.is_file() else None
 
 
+def _raw_jsonl_matches_broadcast(path: Path, station_id: str, broad_no: str) -> bool:
+    sid = str(station_id or "").strip().lower()
+    want_broad = str(broad_no or "").strip()
+    if not sid:
+        return False
+    try:
+        with path.open(encoding="utf-8") as fh:
+            for i, line in enumerate(fh):
+                if i > 48:
+                    break
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if not isinstance(row, dict):
+                    continue
+                row_sid = str(row.get("stationId") or "").strip().lower()
+                if row_sid and row_sid != sid:
+                    continue
+                row_broad = str(row.get("broadNo") or "").strip()
+                if want_broad and row_broad and row_broad != want_broad:
+                    continue
+                if row.get("kind") in ("batch", "event"):
+                    return True
+    except OSError:
+        return False
+    return False
+
+
+def raw_jsonl_paths_for_broadcast(
+    session: dict[str, Any] | None,
+    raw_dir: Path,
+) -> list[Path]:
+    """같은 방송(broadNo)의 당일 raw JSONL — 세션이 갈라져도 모니터용으로 모은다."""
+    if not isinstance(session, dict):
+        return []
+    sid = str(session.get("stationId") or "").strip().lower()
+    broad = str(session.get("broadNo") or "").strip()
+    if not sid:
+        return []
+
+    days: set[str] = set()
+    start = parse_iso(session.get("startedAt"))
+    if start:
+        days.add(start.astimezone(KST).strftime("%Y-%m-%d"))
+    if session.get("active"):
+        days.add(datetime.now(KST).strftime("%Y-%m-%d"))
+    if not days:
+        days.add(datetime.now(KST).strftime("%Y-%m-%d"))
+
+    out: list[Path] = []
+    seen: set[str] = set()
+    for day in sorted(days):
+        day_dir = Path(raw_dir) / day
+        if not day_dir.is_dir():
+            continue
+        try:
+            paths = sorted(day_dir.glob("*.jsonl"), key=lambda p: p.name)
+        except OSError:
+            continue
+        for path in paths:
+            key = str(path.resolve())
+            if key in seen:
+                continue
+            if broad:
+                if not _raw_jsonl_matches_broadcast(path, sid, broad):
+                    continue
+            elif not _raw_jsonl_matches_broadcast(path, sid, ""):
+                continue
+            seen.add(key)
+            out.append(path)
+    return out
+
+
+def earliest_raw_event_at(
+    session: dict[str, Any] | None,
+    *,
+    raw_dir: Path,
+) -> str | None:
+    """같은 방송 raw에서 가장 이른 이벤트 시각."""
+    if not isinstance(session, dict):
+        return None
+    earliest: datetime | None = None
+    for path in raw_jsonl_paths_for_broadcast(session, raw_dir):
+        for row in iter_raw_jsonl_events(path):
+            if str(row.get("status") or "").strip().lower() != "accepted":
+                continue
+            at = parse_iso(row.get("at")) or parse_iso(row.get("sessionStartedAt"))
+            if at and (earliest is None or at < earliest):
+                earliest = at
+    if earliest is None:
+        return None
+    return _iso_z(earliest)
+
+
+def session_monitor_effective_start(
+    session: dict[str, Any] | None,
+    *,
+    raw_dir: Path,
+) -> str | None:
+    """모니터 차트·집계용 시작 시각 — 세션·raw·수집 구간 중 가장 이른 값."""
+    if not isinstance(session, dict):
+        return None
+    candidates: list[datetime] = []
+    for raw_at in (
+        session.get("startedAt"),
+        earliest_raw_event_at(session, raw_dir=raw_dir),
+    ):
+        dt = parse_iso(str(raw_at or "").strip())
+        if dt:
+            candidates.append(dt)
+    for seg in collector_segments_for_monitor(session):
+        if not isinstance(seg, dict):
+            continue
+        dt = parse_iso(str(seg.get("startedAt") or "").strip())
+        if dt:
+            candidates.append(dt)
+    ms = session.get("metricsSeries")
+    if isinstance(ms, dict):
+        for key in ("viewers", "chats", "up", "balloons"):
+            rows = ms.get(key) if isinstance(ms.get(key), list) else []
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                dt = parse_iso(row.get("at"))
+                if dt:
+                    candidates.append(dt)
+    if not candidates:
+        return str(session.get("startedAt") or "").strip() or None
+    return _iso_z(min(candidates))
+
+
+def enrich_session_for_monitor_preview(
+    session: dict[str, Any] | None,
+    store: "CreditsStore",
+    *,
+    raw_dir: Path,
+) -> dict[str, Any]:
+    """실시간 모니터 전용 — 디스크 세션을 변경하지 않고 방송 전체 데이터를 합친다."""
+    if not isinstance(session, dict):
+        return {}
+    try:
+        out: dict[str, Any] = json.loads(json.dumps(session))
+    except (TypeError, ValueError):
+        out = dict(session)
+
+    sid = store._norm_station_id(out.get("stationId") or "")
+    broad = str(out.get("broadNo") or "").strip()
+    if not sid:
+        return out
+
+    active = store.load_session()
+    if store._norm_station_id(active.get("stationId")) == sid:
+        if session_data_score(active) > session_data_score(out):
+            try:
+                out = json.loads(json.dumps(active))
+            except (TypeError, ValueError):
+                out = dict(active)
+            broad = str(out.get("broadNo") or broad or "").strip()
+
+    recovered = store._find_recoverable_session(sid, broad_no=broad)
+    if isinstance(recovered, dict) and (
+        recovered.get("startedAt") or session_data_score(recovered) > 0
+    ):
+        rec_broad = str(recovered.get("broadNo") or "").strip()
+        if not broad or not rec_broad or rec_broad == broad:
+            merge_prior_session_into(out, recovered)
+
+    earliest = earliest_raw_event_at(out, raw_dir=raw_dir)
+    if earliest:
+        cur = parse_iso(out.get("startedAt"))
+        ear = parse_iso(earliest)
+        if ear and (not cur or ear < cur):
+            out["startedAt"] = earliest
+
+    effective = session_monitor_effective_start(out, raw_dir=raw_dir)
+    if effective:
+        out["startedAt"] = effective
+
+    return out
+
+
 def iter_raw_jsonl_events(path: Path) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     try:
@@ -3901,6 +4134,23 @@ def merge_chat_metrics_with_raw_backfill(
     return out
 
 
+def build_chat_metrics_series_from_broadcast_raw(
+    session: dict[str, Any] | None,
+    *,
+    raw_dir: Path,
+) -> list[dict[str, Any]]:
+    """같은 방송의 분리된 raw JSONL을 합쳐 채팅 화력 시계열 생성."""
+    if not isinstance(session, dict):
+        return []
+    paths = raw_jsonl_paths_for_broadcast(session, raw_dir)
+    if not paths:
+        return build_chat_metrics_series_from_session_raw(session, raw_dir=raw_dir)
+    rows: list[dict[str, Any]] = []
+    for path in paths:
+        rows.extend(iter_raw_jsonl_events(path))
+    return build_chat_metrics_series_from_raw_rows(rows)
+
+
 def chat_metrics_series_for_session(
     session: dict[str, Any] | None,
     *,
@@ -3913,7 +4163,7 @@ def chat_metrics_series_for_session(
     stored: list[Any] = []
     if isinstance(ms, dict) and isinstance(ms.get("chats"), list):
         stored = ms["chats"]
-    raw = build_chat_metrics_series_from_session_raw(session, raw_dir=raw_dir)
+    raw = build_chat_metrics_series_from_broadcast_raw(session, raw_dir=raw_dir)
     return merge_chat_metrics_with_raw_backfill(stored, raw)
 
 
