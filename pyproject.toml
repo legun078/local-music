@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "soop-setlist"
+version = "0.1.0"
+description = "숲(SOOP) VOD 팬 타임라인에서 기간별 노래 리스트 정리"
+readme = "soop_setlist/README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+soop-setlist = "soop_setlist.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["soop_setlist*"]
