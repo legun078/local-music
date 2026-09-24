@@ -1,0 +1,4 @@
+{
+  "name": "local-music / broadcast-schedule dev",
+  "install": "bash .cursor/install.sh"
+}
